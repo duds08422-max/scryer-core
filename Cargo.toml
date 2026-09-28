@@ -1,0 +1,18 @@
+[package]
+name = "scryer-core"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Hartwell Labs — lead intelligence engine (BZP/BIP ingestion, KSC/NIS2 scoring, campaign export)"
+authors = ["Hartwell Labs"]
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+strip = false
+debug = 0

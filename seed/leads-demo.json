@@ -1,0 +1,14 @@
+{
+  "leads": [
+    {"org": "ZWiK Police", "email": "przetargi@zwik.police.pl", "domain": "zwik.police.pl", "sector": "wodociagi", "voivodeship": "zachodniopomorskie", "email_verified": true, "hooks": [{"ksc_deadline": 5}, "tender_active"], "source": "BZP+L1"},
+    {"org": "ZWiK Paczków", "email": "biuro@zwik.paczkow.pl", "domain": "zwik.paczkow.pl", "sector": "wodociagi", "voivodeship": "wielkopolskie", "email_verified": false, "hooks": [{"ksc_deadline": 5}], "source": "L1"},
+    {"org": "GPK EKO-BABICE", "email": "gpk@eko-babice.pl", "domain": "eko-babice.pl", "sector": "wodociagi", "voivodeship": "mazowieckie", "email_verified": false, "hooks": [{"ksc_deadline": 5}, "tender_active"], "source": "L1"},
+    {"org": "Medsoft", "email": "kontakt@medsoft.com.pl", "domain": "medsoft.com.pl", "sector": "medtech", "voivodeship": "mazowieckie", "email_verified": true, "hooks": ["cez_recommendation", {"ksc_deadline": 5}], "source": "L2"},
+    {"org": "Mediporta", "email": "biuro@mediporta.pl", "domain": "mediporta.pl", "sector": "medtech", "voivodeship": "malopolskie", "email_verified": true, "hooks": [{"ksc_deadline": 5}], "source": "L2"},
+    {"org": "SPZOZ Przykładowy", "email": "it@spzoz-przyklad.pl", "domain": "spzoz-przyklad.pl", "sector": "szpital", "voivodeship": "zachodniopomorskie", "email_verified": false, "hooks": [{"ksc_deadline": 5}, "cez_recommendation", "nis2_window"], "source": "PIIM-seed"},
+    {"org": "Aurero", "email": "office@aureo.pl", "domain": "aureo.pl", "sector": "medtech", "voivodeship": "dolnoslaskie", "email_verified": false, "hooks": [{"ksc_deadline": 5}], "source": "L2"},
+    {"org": "ZWiK Błędów", "email": "sekretariat@zwikbledow.pl", "domain": "zwikbledow.pl", "sector": "wodociagi", "voivodeship": "mazowieckie", "email_verified": false, "hooks": [{"ksc_deadline": 5}], "source": "L1-pattern"},
+    {"org": "Random Firma", "email": "info@randomfirma.pl", "domain": "randomfirma.pl", "sector": "inne", "voivodeship": "", "email_verified": false, "hooks": [], "source": "test"},
+    {"org": "ZWiK Police (duplikat)", "email": "PRZETARGI@Zwik.Police.pl", "domain": "zwik.police.pl", "sector": "wodociagi", "email_verified": false, "hooks": [], "source": "dup-test"}
+  ]
+}
