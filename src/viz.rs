@@ -6,7 +6,7 @@
 //! z CDN — przy air-gap: SCRYER_VIZ_INLINE=1 docelowo embeduje JS).
 
 use crate::ontology::Ontology;
-use rusqlite::params;
+
 use std::io::Write;
 
 fn esc_json(s: &str) -> String {
@@ -23,7 +23,7 @@ const SECTOR_COLOR: &[(&str, &str)] = &[
 
 fn color_for(sektor: &str) -> &'static str {
     for (k, c) in SECTOR_COLOR {
-        if sektor == k {
+        if sektor == *k {
             return c;
         }
     }
@@ -103,9 +103,9 @@ pub fn export_html(o: &Ontology, path: &str) -> Result<usize, String> {
     for (nazwa, pid, _mx, dmarc) in &domeny {
         let color = if dmarc.is_empty() { "#e5484d" } else { "#64748b" };
         edges.push_str(&format!(
-            "{{from: {}, to: {}, label: {}, color: {{color: \"{}\"}}, font: {{size: 8}}}},\n",
-            pid + 100000, // domeny na osobnych id, żeby nie kolidowały
-            format!("\"{}\"", esc_json(nazwa)),
+            "{{from: {}, to: {}, color: {{color: \"{}\"}}}},\n",
+            pid + 100000,
+            100000 + domeny.iter().position(|d| d.0 == *nazwa).map(|i| i as i64 + 1).unwrap_or(0),
             color
         ));
     }

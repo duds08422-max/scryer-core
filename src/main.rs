@@ -7,7 +7,7 @@
 //!   demo                               — generuje seed demo i odpala score (dla leniwych)
 
 use scryer_core::model::Lead;
-use scryer_core::{bzp, export, ontology, query, score, send, store};
+use scryer_core::{bzp, export, ontology, query, score, send, store, viz};
 use std::path::Path;
 
 fn main() {
@@ -19,6 +19,7 @@ fn main() {
         Some("tenders") if args.len() >= 3 => cmd_tenders(&args[2]),
         Some("import") if args.len() >= 3 => cmd_import(&args[2..]),
         Some("ask") if args.len() >= 3 => cmd_ask(&args[2]),
+        Some("viz") => cmd_viz(),
         Some("report") => println!("{}", send::report("outbox.jsonl")),
         Some("demo") => cmd_demo(),
         _ => {
@@ -31,6 +32,7 @@ fn main() {
             eprintln!("  scryer-core tenders <bzp.json>                (scoring przetargow BZP pod Talus; SCRYER_OUT=csv)");
             eprintln!("  scryer-core import <seeds...>               (migracja seedów/outboxu do ontologii; SCRYER_DB=scryer.db)");
             eprintln!("  scryer-core ask <zapytanie>                 (przykłady: hot-nodmarc | bez-kontaktu-30d | stats)");
+            eprintln!("  scryer-core viz                              (graf ontologii -> HTML; SCRYER_VIZ=out.html)");
             eprintln!("  scryer-core demo");
             std::process::exit(2);
         }
@@ -175,6 +177,15 @@ fn cmd_ask(q: &str) {
             eprintln!("nieznane zapytanie: {other}. Dostępne: hot-nodmarc | bez-kontaktu-30d | stats");
             std::process::exit(2);
         }
+    }
+}
+
+fn cmd_viz() {
+    let o = ontology::Ontology::open(&db_path()).expect("otwarcie ontologii");
+    let out = std::env::var("SCRYER_VIZ").unwrap_or_else(|_| "ontology.html".into());
+    match viz::export_html(&o, &out) {
+        Ok(n) => println!("viz: {n} podmiotów → {out} (otwórz w przeglądarce)"),
+        Err(e) => eprintln!("viz błąd: {e}"),
     }
 }
 
