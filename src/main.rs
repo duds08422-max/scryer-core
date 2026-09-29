@@ -7,7 +7,7 @@
 //!   demo                               — generuje seed demo i odpala score (dla leniwych)
 
 use scryer_core::model::Lead;
-use scryer_core::{bzp, export, score, send, store};
+use scryer_core::{bzp, export, ontology, score, send, store};
 use std::path::Path;
 
 fn main() {
@@ -17,6 +17,8 @@ fn main() {
         Some("briefs") if args.len() >= 4 => cmd_briefs(&args[2], &args[3]),
         Some("send") if args.len() >= 3 => cmd_send(&args[2]),
         Some("tenders") if args.len() >= 3 => cmd_tenders(&args[2]),
+        Some("import") if args.len() >= 3 => cmd_import(&args[2..]),
+        Some("ask") if args.len() >= 3 => cmd_ask(&args[2]),
         Some("report") => println!("{}", send::report("outbox.jsonl")),
         Some("demo") => cmd_demo(),
         _ => {
@@ -27,6 +29,8 @@ fn main() {
             eprintln!("                  SCRYER_RESEND_KEY=klucz, SCRYER_FROM=adres, SCRYER_DAILY_LIMIT=20, SCRYER_OUTBOX=outbox.jsonl)");
             eprintln!("  scryer-core report                            (statystyki kampanii z outbox.jsonl)");
             eprintln!("  scryer-core tenders <bzp.json>                (scoring przetargow BZP pod Talus; SCRYER_OUT=csv)");
+            eprintln!("  scryer-core import <seeds...>               (migracja seedów/outboxu do ontologii; SCRYER_DB=scryer.db)");
+            eprintln!("  scryer-core ask <zapytanie>                 (przykłady: hot-nodmarc | bez-kontaktu-30d | stats)");
             eprintln!("  scryer-core demo");
             std::process::exit(2);
         }
@@ -87,6 +91,78 @@ fn cmd_briefs(path: &str, outdir: &str) {
 fn cmd_demo() {
     println!("seed demo: seed/leads-demo.json → score");
     cmd_score("seed/leads-demo.json");
+}
+
+fn db_path() -> std::path::PathBuf {
+    std::path::PathBuf::from(std::env::var("SCRYER_DB").unwrap_or_else(|_| "scryer.db".into()))
+}
+
+fn cmd_import(paths: &[String]) {
+    let o = ontology::Ontology::open(&db_path()).expect("otwarcie ontologii");
+    let mut total = 0usize;
+    for p in paths {
+        let raw = std::fs::read_to_string(p).unwrap_or_else(|e| panic!("nie mogę czytać {p}: {e}"));
+        match o.import_leads_json(&raw) {
+            Ok(n) => {
+                println!("  {p}: {n} leadów → ontologia");
+                total += n;
+            }
+            Err(e) => eprintln!("  {p}: BŁĄD {e}"),
+        }
+    }
+    // migracja outboxu → interakcje (suppression w grafie)
+    let mut n_int = 0usize;
+    if let Ok(raw) = std::fs::read_to_string("outbox.jsonl") {
+        for line in raw.lines() {
+            if let Ok(v) = serde_json::from_str::<serde_json::Value>(line) {
+                if v["status"] == "sent" {
+                    let _ = o.log_interakcja(&ontology::NewInterakcja {
+                        typ: "email_sent".into(),
+                        kierunek: "out".into(),
+                        email: v["email"].as_str().unwrap_or("").to_lowercase(),
+                        temat: v["subject"].as_str().unwrap_or("").into(),
+                        ts: v["ts"].as_str().and_then(|s| s.parse().ok()).unwrap_or(0),
+                        wynik: "-".into(),
+                        ref_id: v["via"].as_str().unwrap_or("").into(),
+                    });
+                    n_int += 1;
+                }
+            }
+        }
+    }
+    println!("import: {total} podmiotów/kontaktów, {n_int} interakcji → {}", db_path().display());
+}
+
+fn cmd_ask(q: &str) {
+    let o = ontology::Ontology::open(&db_path()).expect("otwarcie ontologii");
+    match q {
+        "hot-nodmarc" => {
+            let rows = o.hot_bez_dmarc().expect("zapytanie");
+            println!("HOT podmioty z brakiem DMARC ({}):", rows.len());
+            for (org, dom) in rows.iter().take(30) {
+                println!("  {org} — {dom}");
+            }
+        }
+        "bez-kontaktu-30d" => {
+            let rows = o.bez_kontaktu_od(30).expect("zapytanie");
+            println!("adresy bez kontaktu 30 dni ({}):", rows.len());
+            for e in rows.iter().take(30) {
+                println!("  {e}");
+            }
+        }
+        "stats" => {
+            for t in ["podmiot", "domena", "osoba", "przetarg", "interakcja"] {
+                let n: i64 = o
+                    .count_table(t)
+                    .unwrap_or_else(|e| panic!("{e}"));
+                println!("  {t}: {n}");
+            }
+        }
+        other => {
+            eprintln!("nieznane zapytanie: {other}. Dostępne: hot-nodmarc | bez-kontaktu-30d | stats");
+            std::process::exit(2);
+        }
+    }
 }
 
 fn cmd_tenders(path: &str) {
