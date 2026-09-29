@@ -7,18 +7,24 @@
 //! 3. Limit: domyślnie 20 wysyłek/run (SCRYER_DAILY_LIMIT) — snajper,
 //!    nie karabin (taktyka CAMPAIGN-ETAP1).
 //! 4. Pełny audyt: każdy attempt = wiersz JSONL w outbox.
+//! 5. v0.2 SUPPRESSION: email obecny w outbox ze statusem "sent" nigdy
+//!    nie dostanie drugiego maila (niezależnie od wsadu).
+//! 6. v0.2 A/B: 3 warianty tematu rotowane round-robin (równy podział).
 
 use crate::model::Lead;
 use serde::Serialize;
-use std::io::Write;
+use std::collections::HashSet;
+use std::io::{BufRead, Write};
 use std::time::Duration;
 
 #[derive(Debug, Serialize)]
 pub struct SendRecord {
     pub org: String,
     pub email: String,
-    pub status: String, // "sent" | "dry_run" | "skipped_no_mx" | "skipped_limit" | "error"
+    pub status: String, // sent|dry_run|skipped_no_mx|skipped_limit|skipped_suppressed|error
     pub via: String,
+    pub subject: String,
+    pub variant: u8,
     pub error: Option<String>,
     pub ts: String,
 }
@@ -59,13 +65,29 @@ fn org_short(org: &str) -> String {
             .to_string()
     };
     let s = cut(org);
-    if s.len() > 60 { format!("{}…", &s[..57]) } else { s }
+    // slice po znakach, nie bajtach (polskie znaki = >1 bajt; bug paniki 29.09)
+    if s.chars().count() > 60 {
+        let t: String = s.chars().take(57).collect();
+        format!("{t}…")
+    } else {
+        s
+    }
+}
+
+/// 3 warianty tematu (rotacja A/B/C, round-robin po indeksie wsadu).
+/// Warianty zakazane przez CAMPAIGN-ETAP1 §2 (bez "omijam przetarg" itp.).
+pub fn subject_variant(short: &str, v: u8) -> String {
+    match v % 3 {
+        0 => format!("KSC przed 3.10 — czy {short} ma już plan ochrony offline?"),
+        1 => format!("{short}: dni do samorejestracji KSC — plan na offline?"),
+        _ => format!("Pilot 14 dni dla {short} — detekcja ransomware offline (Linux)"),
+    }
 }
 
 /// Treść maila (text/plain — snajper, nie newsletter).
-pub fn render_email(lead: &Lead, ammo: Option<&str>) -> (String, String) {
+pub fn render_email(lead: &Lead, ammo: Option<&str>, variant: u8) -> (String, String) {
     let short = org_short(&lead.org);
-    let subject = format!("KSC przed 3.10 — czy {short} ma plan ochrony offline?");
+    let subject = subject_variant(&short, variant);
     let ammo_line = ammo
         .map(|a| {
             format!(
@@ -97,21 +119,36 @@ pub fn has_mx(lead: &Lead, server: &str) -> bool {
         return false;
     };
     match crate::dnsmini::query(&d, 15, server, Duration::from_secs(2)) {
-        Ok(ans) => !ans.is_nxdomain()
-            && ans.records.iter().any(|r| {
-                matches!(r, crate::dnsmini::Record::Mx { .. })
-            }),
+        Ok(ans) => {
+            !ans.is_nxdomain()
+                && ans
+                    .records
+                    .iter()
+                    .any(|r| matches!(r, crate::dnsmini::Record::Mx { .. }))
+        }
         Err(_) => false,
     }
 }
 
+/// Suppression list: emaile ze statusem "sent" z poprzednich runów (JSONL).
+pub fn load_suppressed(outbox_path: &str) -> HashSet<String> {
+    let mut set = HashSet::new();
+    if let Ok(f) = std::fs::File::open(outbox_path) {
+        for line in std::io::BufReader::new(f).lines().map_while(Result::ok) {
+            if let Ok(v) = serde_json::from_str::<serde_json::Value>(&line) {
+                if v["status"] == "sent" {
+                    if let Some(e) = v["email"].as_str() {
+                        set.insert(e.to_lowercase());
+                    }
+                }
+            }
+        }
+    }
+    set
+}
+
 /// Wysyłka jednego maila przez Resend; zwraca message-id albo błąd.
-pub fn send_one(
-    cfg: &SendConfig,
-    to_email: &str,
-    subject: &str,
-    body: &str,
-) -> Result<String, String> {
+pub fn send_one(cfg: &SendConfig, to_email: &str, subject: &str, body: &str) -> Result<String, String> {
     let payload = serde_json::json!({
         "from": cfg.from,
         "to": [to_email],
@@ -131,43 +168,60 @@ pub fn send_one(
     Ok(id)
 }
 
-/// Główna pętla: leady (ranked) → gate MX → limit → send/log → audyt JSONL.
+/// Główna pętla: suppression → gate MX → limit → A/B → send/log → audyt JSONL.
 pub fn run_campaign(leads: &[Lead], outbox_path: &str) -> Vec<SendRecord> {
     let cfg = SendConfig::from_env();
+    let suppressed = load_suppressed(outbox_path);
     let mut records = Vec::new();
-    let mut sent = 0usize;
+    let mut sent_this_run = 0usize;
+    let mut idx = 0u8;
 
     for lead in leads {
-        if sent >= cfg.daily_limit {
-            records.push(SendRecord {
+        idx = idx.wrapping_add(1);
+        let variant = idx % 3;
+        let (subject, body) = render_email(lead, None, variant);
+        let rec = if suppressed.contains(&lead.email.to_lowercase()) {
+            SendRecord {
+                org: lead.org.clone(),
+                email: lead.email.clone(),
+                status: "skipped_suppressed".into(),
+                via: "-".into(),
+                subject,
+                variant,
+                error: Some("już dostał maila wcześniej (suppression)".into()),
+                ts: now(),
+            }
+        } else if sent_this_run >= cfg.daily_limit {
+            SendRecord {
                 org: lead.org.clone(),
                 email: lead.email.clone(),
                 status: "skipped_limit".into(),
                 via: "-".into(),
+                subject,
+                variant,
                 error: Some("daily limit reached".into()),
                 ts: now(),
-            });
-            continue;
-        }
-        if !has_mx(lead, &cfg.dns_server) {
-            records.push(SendRecord {
+            }
+        } else if !has_mx(lead, &cfg.dns_server) {
+            SendRecord {
                 org: lead.org.clone(),
                 email: lead.email.clone(),
                 status: "skipped_no_mx".into(),
                 via: "-".into(),
+                subject,
+                variant,
                 error: None,
                 ts: now(),
-            });
-            continue;
-        }
-        let (subject, body) = render_email(lead, None);
-        let rec = if !cfg.confirm {
-            sent += 1;
+            }
+        } else if !cfg.confirm {
+            sent_this_run += 1;
             SendRecord {
                 org: lead.org.clone(),
                 email: lead.email.clone(),
                 status: "dry_run".into(),
                 via: "resend(dry)".into(),
+                subject,
+                variant,
                 error: None,
                 ts: now(),
             }
@@ -177,18 +231,22 @@ pub fn run_campaign(leads: &[Lead], outbox_path: &str) -> Vec<SendRecord> {
                 email: lead.email.clone(),
                 status: "error".into(),
                 via: "resend".into(),
+                subject,
+                variant,
                 error: Some("brak SCRYER_RESEND_KEY".into()),
                 ts: now(),
             }
         } else {
             match send_one(&cfg, &lead.email, &subject, &body) {
                 Ok(id) => {
-                    sent += 1;
+                    sent_this_run += 1;
                     SendRecord {
                         org: lead.org.clone(),
                         email: lead.email.clone(),
                         status: "sent".into(),
                         via: format!("resend:{id}"),
+                        subject,
+                        variant,
                         error: None,
                         ts: now(),
                     }
@@ -198,6 +256,8 @@ pub fn run_campaign(leads: &[Lead], outbox_path: &str) -> Vec<SendRecord> {
                     email: lead.email.clone(),
                     status: "error".into(),
                     via: "resend".into(),
+                    subject,
+                    variant,
                     error: Some(e),
                     ts: now(),
                 },
@@ -226,14 +286,49 @@ fn now() -> String {
         .unwrap_or_default()
 }
 
+/// Raport kampanii z całego outbox.jsonl (do cmd_report).
+pub fn report(outbox_path: &str) -> String {
+    let (mut sent, mut dry, mut no_mx, mut lim, mut supp, mut err) = (0, 0, 0, 0, 0, 0);
+    let mut variants = [0u32; 3];
+    let mut domains = std::collections::BTreeSet::new();
+    if let Ok(f) = std::fs::File::open(outbox_path) {
+        for line in std::io::BufReader::new(f).lines().map_while(Result::ok) {
+            if let Ok(v) = serde_json::from_str::<serde_json::Value>(&line) {
+                match v["status"].as_str().unwrap_or("") {
+                    "sent" => {
+                        sent += 1;
+                        if let Some(d) = v["email"].as_str().and_then(|e| e.split('@').nth(1)) {
+                            domains.insert(d.to_string());
+                        }
+                    }
+                    "dry_run" => dry += 1,
+                    "skipped_no_mx" => no_mx += 1,
+                    "skipped_limit" => lim += 1,
+                    "skipped_suppressed" => supp += 1,
+                    _ => err += 1,
+                }
+                if let Some(x) = v["variant"].as_u64() {
+                    variants[(x % 3) as usize] += 1;
+                }
+            }
+        }
+    }
+    format!(
+        "KAMPANIA: sent={sent} dry_run={dry} no_mx={no_mx} limit={lim} suppressed={supp} errors={err}\n\
+         warianty A/B/C: A={} B={} C={}\n\
+         unikalnych domen dotkniętych: {}\n\
+         suppression: {sent} maili live (limit dzienny Resend: 100)",
+        variants[0], variants[1], variants[2], domains.len()
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::model::Sector;
 
-    #[test]
-    fn render_email_zawiera_kluczowe_elementy() {
-        let lead = Lead {
+    fn lead() -> Lead {
+        Lead {
             org: "UNIWERSYTECKI SZPITAL KLINICZNY W OPOLU SPÓŁKA Z OGRANICZONĄ ODPOWIEDZIALNOŚCIĄ"
                 .into(),
             domain: "usk.opole.pl".into(),
@@ -243,8 +338,14 @@ mod tests {
             email_verified: false,
             hooks: vec![],
             source: "test".into(),
-        };
-        let (subject, body) = render_email(&lead, Some("brak rekordu DMARC"));
+            pop: 0,
+            city: String::new(),
+        }
+    }
+
+    #[test]
+    fn render_email_zawiera_kluczowe_elementy() {
+        let (subject, body) = render_email(&lead(), Some("brak rekordu DMARC"), 0);
         assert!(subject.contains("UNIWERSYTECKI SZPITAL KLINICZNY W OPOLU"));
         assert!(subject.contains("KSC"));
         assert!(body.contains("art. 25 ustawy KSC"));
@@ -256,10 +357,47 @@ mod tests {
     }
 
     #[test]
-    fn org_short_obcina_forme_prawna() {
+    fn warianty_tematu_sa_rozne_i_bez_zakazanych_fraz() {
+        let l = lead();
+        let s0 = render_email(&l, None, 0).0;
+        let s1 = render_email(&l, None, 1).0;
+        let s2 = render_email(&l, None, 2).0;
+        assert_ne!(s0, s1);
+        assert_ne!(s1, s2);
+        for s in [&s0, &s1, &s2] {
+            let low = s.to_lowercase();
+            assert!(!low.contains("omijam przetarg"));
+            assert!(!low.contains("taran"));
+        }
+    }
+
+    #[test]
+    fn org_short_obcina_forme_prawna_i_nie_paniekuje_na_utf() {
         assert_eq!(
             org_short("SZPITAL WOJSKOWY SPÓŁKA Z OGRANICZONĄ ODPOWIEDZIALNOŚCIĄ"),
             "SZPITAL WOJSKOWY"
         );
+        let dlugie = "ŚŻÓŁĆ GĘŚLĄ JAŹŃ".repeat(20);
+        let _ = org_short(&dlugie); // nie może panikować na polskich znakach
+    }
+
+    #[test]
+    fn suppression_wczytuje_wyslanych() {
+        let dir = std::env::temp_dir().join(format!("scryer-supp-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        let p = dir.join("outbox.jsonl");
+        std::fs::write(
+            &p,
+            format!(
+                "{}\n{}\n",
+                r#"{"org":"A","email":"a@x.pl","status":"sent","via":"r:1","subject":"s","variant":0,"error":null,"ts":"0"}"#,
+                r#"{"org":"B","email":"b@x.pl","status":"skipped_limit","via":"-","subject":"s","variant":1,"error":null,"ts":"0"}"#
+            ),
+        )
+        .unwrap();
+        let s = load_suppressed(p.to_str().unwrap());
+        assert!(s.contains("a@x.pl"));
+        assert!(!s.contains("b@x.pl"));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

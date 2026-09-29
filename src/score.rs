@@ -49,11 +49,16 @@ pub fn dedupe(leads: Vec<Lead>) -> (Vec<Lead>, usize) {
     (out, dropped)
 }
 
-/// Ranking: score malejąco, remis → org alfabetycznie (stabilny output).
+/// Ranking: score malejąco, remis → instytucjonalne przed resztą,
+/// potem większe miasto (pop) przed mniejszym, na końcu org alfabetycznie (stabilny output).
+/// v0.2: remisy nie są już rozstrzygane alfabetycznie (dawny bug: pierwsza fala
+/// była w praktyce alfabetyczna, nie wg szans).
 pub fn rank(mut leads: Vec<Lead>) -> Vec<Lead> {
     leads.sort_by(|a, b| {
         b.score()
             .cmp(&a.score())
+            .then_with(|| b.is_institutional().cmp(&a.is_institutional()))
+            .then_with(|| b.pop.cmp(&a.pop))
             .then_with(|| a.org.to_lowercase().cmp(&b.org.to_lowercase()))
     });
     leads
@@ -163,6 +168,8 @@ mod tests {
             email_verified: verified,
             hooks,
             source: "test".into(),
+            pop: 0,
+            city: String::new(),
         }
     }
 
@@ -175,10 +182,12 @@ mod tests {
             vec![Hook::KscDeadline(3), Hook::CezRecommendation],
             true,
         );
-        assert_eq!(szpital.score(), 20);
+        // v0.2: 10 sektor + 5 ksc + 2 cez + 3 verified + 2 local boost (ZPM) = 22
+        assert_eq!(szpital.score(), 22);
         assert_eq!(szpital.tier(), "HOT");
+        // v0.2: 3 sektor + 2 local boost = 5 (nie instytucja, nie freemail)
         let other = lead("Firma Y", "b@y.pl", Sector::Other, vec![], false);
-        assert_eq!(other.score(), 3);
+        assert_eq!(other.score(), 5);
         assert_eq!(other.tier(), "COLD");
     }
 

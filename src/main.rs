@@ -16,6 +16,7 @@ fn main() {
         Some("score") if args.len() >= 3 => cmd_score(&args[2]),
         Some("briefs") if args.len() >= 4 => cmd_briefs(&args[2], &args[3]),
         Some("send") if args.len() >= 3 => cmd_send(&args[2]),
+        Some("report") => println!("{}", send::report("outbox.jsonl")),
         Some("demo") => cmd_demo(),
         _ => {
             eprintln!("użycie:");
@@ -23,6 +24,7 @@ fn main() {
             eprintln!("  scryer-core briefs <leads.json> <katalog>    (SCRYER_DNS=serwer)");
             eprintln!("  scryer-core send <leads.json>                (DRY-RUN domyślnie; SCRYER_CONFIRM=yes = wyślij;");
             eprintln!("                  SCRYER_RESEND_KEY=klucz, SCRYER_FROM=adres, SCRYER_DAILY_LIMIT=20, SCRYER_OUTBOX=outbox.jsonl)");
+            eprintln!("  scryer-core report                            (statystyki kampanii z outbox.jsonl)");
             eprintln!("  scryer-core demo");
             std::process::exit(2);
         }
@@ -102,7 +104,8 @@ fn cmd_send(path: &str) {
             _ => err += 1,
         }
     }
-    println!("sent={sent} dry_run={dry} skipped_no_mx={skip_mx} skipped_limit={skip_lim} errors={err}");
+    println!("sent={sent} dry_run={dry} skipped_no_mx={skip_mx} skipped_limit={skip_lim} skipped_suppressed={} errors={err}",
+        records.iter().filter(|r| r.status == "skipped_suppressed").count());
     println!("audyt → {outbox}");
     if dry > 0 {
         println!("⚠ DRY-RUN: nic nie wyszło. Aby wysłać naprawdę: SCRYER_CONFIRM=yes");

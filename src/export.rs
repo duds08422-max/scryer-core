@@ -250,6 +250,8 @@ mod tests {
             email_verified: false,
             hooks: vec![crate::model::Hook::KscDeadline(5)],
             source: "test".into(),
+            pop: 0,
+            city: String::new(),
         };
         let mut a = audit_fixture();
         a.analyze();
@@ -270,6 +272,8 @@ mod tests {
             email_verified: false,
             hooks: vec![],
             source: "t".into(),
+            pop: 0,
+            city: String::new(),
         };
         let mut audits = std::collections::BTreeMap::new();
         let mut a = audit_fixture();
