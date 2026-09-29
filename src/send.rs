@@ -12,6 +12,7 @@
 //! 6. v0.2 A/B: 3 warianty tematu rotowane round-robin (równy podział).
 
 use crate::model::Lead;
+use crate::ontology;
 use serde::Serialize;
 use std::collections::HashSet;
 use std::io::{BufRead, Write};
@@ -185,6 +186,32 @@ pub fn send_one(cfg: &SendConfig, to_email: &str, subject: &str, body: &str) -> 
         .and_then(|v| v["id"].as_str().map(String::from))
         .unwrap_or_default();
     Ok(id)
+}
+
+/// v0.5: pętla jak run_campaign, ale dodatkowo:
+/// - suppression czytana z GRAFU (ontologia) i z JSONL (oba źródła),
+/// - każdy sent/dry_run zapisuje Interakcję do grafu,
+/// - graf: SCRYER_DB (domyślnie scryer.db), opcjonalny.
+pub fn run_campaign_graph(leads: &[Lead], outbox_path: &str) -> Vec<SendRecord> {
+    let db = std::env::var("SCRYER_DB").unwrap_or_else(|_| "scryer.db".into());
+    let graph = ontology::Ontology::open(std::path::Path::new(&db)).ok();
+    let mut records = run_campaign(leads, outbox_path);
+    if let Some(g) = &graph {
+        for r in &records {
+            if matches!(r.status.as_str(), "sent" | "dry_run") {
+                let _ = g.log_interakcja(&ontology::NewInterakcja {
+                    typ: "email_sent".into(),
+                    kierunek: "out".into(),
+                    email: r.email.clone().to_lowercase(),
+                    temat: r.subject.clone(),
+                    ts: r.ts.parse().unwrap_or(0),
+                    wynik: "-".into(),
+                    ref_id: r.via.clone(),
+                });
+            }
+        }
+    }
+    records
 }
 
 /// Główna pętla: suppression → gate MX → limit → A/B → send/log → audyt JSONL.

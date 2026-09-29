@@ -13,6 +13,7 @@ pub mod enrich;
 pub mod export;
 pub mod model;
 pub mod ontology;
+pub mod query;
 pub mod report;
 pub mod score;
 pub mod send;

@@ -7,7 +7,7 @@
 //!   demo                               — generuje seed demo i odpala score (dla leniwych)
 
 use scryer_core::model::Lead;
-use scryer_core::{bzp, export, ontology, score, send, store};
+use scryer_core::{bzp, export, ontology, query, score, send, store};
 use std::path::Path;
 
 fn main() {
@@ -135,6 +135,19 @@ fn cmd_import(paths: &[String]) {
 
 fn cmd_ask(q: &str) {
     let o = ontology::Ontology::open(&db_path()).expect("otwarcie ontologii");
+    if q != "hot-nodmarc" && q != "bez-kontaktu-30d" && q != "stats" {
+        match query::parse(q) {
+            Ok(parsed) => {
+                let rows = query::run(&o, &parsed).unwrap_or_else(|e| panic!("{e}"));
+                println!("wyników: {}", rows.len());
+                for r in rows {
+                    println!("  {r}");
+                }
+            }
+            Err(e) => eprintln!("błąd zapytania: {e}"),
+        }
+        return;
+    }
     match q {
         "hot-nodmarc" => {
             let rows = o.hot_bez_dmarc().expect("zapytanie");
@@ -209,7 +222,7 @@ fn cmd_send(path: &str) {
     let (ranked, rep) = score::run(leads);
     println!("scryer: {} — kampania (top {})", rep.line(), ranked.len());
     let outbox = std::env::var("SCRYER_OUTBOX").unwrap_or_else(|_| "outbox.jsonl".into());
-    let records = send::run_campaign(&ranked, &outbox);
+    let records = send::run_campaign_graph(&ranked, &outbox);
     let (mut sent, mut dry, mut skip_mx, mut skip_lim, mut err) = (0, 0, 0, 0, 0);
     for r in &records {
         match r.status.as_str() {

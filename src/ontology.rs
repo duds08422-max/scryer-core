@@ -65,21 +65,41 @@ impl Ontology {
         Self::open(Path::new(":memory:"))
     }
 
+    /// Dostęp do połączenia (dla modułu zapytań).
+    pub fn conn(&self) -> &Connection {
+        &self.conn
+    }
+
     /// Upsert podmiotu po NIP (fallback: nazwa+miasto). Zwraca id.
     pub fn upsert_podmiot(&self, p: &NewPodmiot) -> SqlResult<i64> {
-        let mut stmt = self.conn.prepare_cached(
-            "INSERT INTO podmiot (nazwa, nip, sektor, wojewodztwo, miasto, pop, zrodla)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
-             ON CONFLICT(nip) DO UPDATE SET
-               nazwa=excluded.nazwa, sektor=excluded.sektor,
-               wojewodztwo=excluded.wojewodztwo, miasto=excluded.miasto,
-               pop=MAX(pop, excluded.pop)
-             RETURNING id",
-        )?;
-        let id: i64 = stmt.query_row(
-            params![p.nazwa, p.nip, p.sektor, p.wojewodztwo, p.miasto, p.pop, p.zrodla],
-            |r| r.get(0),
-        )?;
+        // pusty NIP = NULL (inaczej UNIQUE(nip) kolizja wszystkich "bez NIP")
+        let nip: Option<String> = if p.nip.trim().is_empty() {
+            None
+        } else {
+            Some(p.nip.trim().to_string())
+        };
+        let id: i64 = if let Some(n) = &nip {
+            let mut stmt = self.conn.prepare_cached(
+                "INSERT INTO podmiot (nazwa, nip, sektor, wojewodztwo, miasto, pop, zrodla)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+                 ON CONFLICT(nip) DO UPDATE SET
+                   nazwa=excluded.nazwa, sektor=excluded.sektor,
+                   wojewodztwo=excluded.wojewodztwo, miasto=excluded.miasto,
+                   pop=MAX(pop, excluded.pop)
+                 RETURNING id",
+            )?;
+            stmt.query_row(
+                params![p.nazwa, n, p.sektor, p.wojewodztwo, p.miasto, p.pop, p.zrodla],
+                |r| r.get(0),
+            )?
+        } else {
+            self.conn.execute(
+                "INSERT INTO podmiot (nazwa, nip, sektor, wojewodztwo, miasto, pop, zrodla)
+                 VALUES (?1, NULL, ?2, ?3, ?4, ?5, ?6)",
+                params![p.nazwa, p.sektor, p.wojewodztwo, p.miasto, p.pop, p.zrodla],
+            )?;
+            self.conn.last_insert_rowid()
+        };
         Ok(id)
     }
 
@@ -145,7 +165,7 @@ impl Ontology {
             sector: String,
             #[serde(default)]
             voivodeship: String,
-            #[serde(default)]
+            #[serde(default, alias = "miejscowosc")]
             city: String,
             #[serde(default)]
             pop: i64,
@@ -166,14 +186,15 @@ impl Ontology {
                 .map_err(|e| format!("JSON: {e}"))?
                 .leads
         };
-        let mut n = 0;
+        let mut n = 0usize;
+        let mut skipped = 0usize;
         for l in leads {
             let dom = if l.domain.is_empty() {
                 l.email.split('@').nth(1).unwrap_or("").to_string()
             } else {
                 l.domain.clone()
             };
-            let pid = self.upsert_podmiot(&NewPodmiot {
+            let pid = match self.upsert_podmiot(&NewPodmiot {
                 nazwa: l.org.clone(),
                 nip: l.nip.clone(),
                 sektor: l.sector.clone(),
@@ -181,14 +202,23 @@ impl Ontology {
                 miasto: l.city.clone(),
                 pop: l.pop,
                 zrodla: l.source.clone(),
-            })
-            .map_err(|e| e.to_string())?;
+            }) {
+                Ok(id) => id,
+                Err(rusqlite::Error::SqliteFailure(_, _)) => {
+                    skipped += 1;
+                    continue;
+                }
+                Err(e) => return Err(e.to_string()),
+            };
             if !dom.is_empty() {
                 self.upsert_domena(&dom, true, pid).map_err(|e| e.to_string())?;
             }
             self.upsert_osoba_email(&l.email, "kontakt", pid)
                 .map_err(|e| e.to_string())?;
             n += 1;
+        }
+        if skipped > 0 {
+            println!("  (pominięte duplikaty: {skipped})");
         }
         Ok(n)
     }
