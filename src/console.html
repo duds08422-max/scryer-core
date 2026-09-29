@@ -345,7 +345,7 @@
       <path d="M16 2v6M16 24v6M2 16h6M24 16h6" stroke="#35e0a1" stroke-width="1.2" opacity=".5"/>
     </svg>
     <span class="word">SCR<em>Y</em>ER</span>
-    <span class="ver">v0.7</span>
+    <span class="ver">v0.7.1</span>
   </div>
   <div id="stats"></div>
   <div class="topright">
@@ -573,9 +573,10 @@ async function showPodmiot(id) {
           <span style="color:var(--tx1)">${esc(i.temat)}</span></li>`).join("") || "<li>—</li>"
       }</ul></section>`;
     $("#drawer").classList.add("on");
+    setTimeout(() => window.dispatchEvent(new Event("resize")), 100); // canvas grafu za drawerem
   } catch (e) { toast(e.message, "err"); }
 }
-$("#drawer-close").onclick = () => { $("#drawer").classList.remove("on"); $$("#tbody tr").forEach(tr => tr.classList.remove("open")); };
+$("#drawer-close").onclick = () => { $("#drawer").classList.remove("on"); $$("#tbody tr").forEach(tr => tr.classList.remove("open")); setTimeout(() => window.dispatchEvent(new Event("resize")), 100); };
 document.addEventListener("click", (ev) => {
   const b = ev.target.closest("#d-recon");
   if (b) {
@@ -598,11 +599,19 @@ function loadVis() {
   if (typeof vis !== "undefined") return Promise.resolve();
   if (visLoading) return visLoading;
   visLoading = new Promise((ok, bad) => {
-    const s = document.createElement("script");
-    s.src = "/assets/vis-network.min.js";
-    s.onload = ok;
-    s.onerror = () => bad(new Error("nie mogę załadować vis-network z /assets"));
-    document.head.appendChild(s);
+    // lokalnie z binarki → fallback CDN → błąd z jasnym komunikatem
+    const tryUrl = (url, fail) => {
+      const s = document.createElement("script");
+      s.src = url;
+      s.onload = ok;
+      s.onerror = fail;
+      document.head.appendChild(s);
+    };
+    tryUrl("/assets/vis-network.min.js", () =>
+      tryUrl("https://unpkg.com/vis-network/standalone/umd/vis-network.min.js", () =>
+        bad(new Error("vis-network niedostępny (lokal i CDN)"))
+      )
+    );
   });
   return visLoading;
 }
@@ -666,6 +675,11 @@ function renderGraph() {
   }
   nodes = new vis.DataSet(n); edges = new vis.DataSet(e);
   const container = $("#graph");
+  if (!n.length) {
+    container.innerHTML = '<div class="empty" style="position:absolute;inset:0">brak węzłów — rozluźnij filtry</div>';
+    $("#g-count").textContent = "0 węzłów";
+    return;
+  }
   container.innerHTML = '<div id="graph-msg">stabilizacja</div><div class="scanline"></div>';
   const network = new vis.Network(container, { nodes, edges }, {
     autoResize: true,
@@ -690,9 +704,18 @@ function renderGraph() {
     const id = params.nodes[0];
     if (id && String(id).startsWith("p")) showPodmiot(Number(String(id).slice(1)));
   });
-  // vis nie widzi zmian rozmiaru kontenera (drawer/open) → obserwujemy sami
+  // vis słucha WYŁĄCZNIE na window.resize — zmiana kontenera (drawer!) jej nie
+  // łapie; redraw() też nie skaluje canvasa. Jedyny skuteczny fix: wystrzelić
+  // window.resize + fit, gdy rozmiar #graph się zmieni.
   if (window._graphRO) window._graphRO.disconnect();
-  window._graphRO = new ResizeObserver(() => network.redraw());
+  clearTimeout(window._grz);
+  window._graphRO = new ResizeObserver(() => {
+    clearTimeout(window._grz);
+    window._grz = setTimeout(() => {
+      window.dispatchEvent(new Event("resize"));
+      network.fit();
+    }, 90);
+  });
   window._graphRO.observe(container);
   $("#g-count").textContent = `${n.length} węzłów · ${e.length} krawędzi`;
 }
