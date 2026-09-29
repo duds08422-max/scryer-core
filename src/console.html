@@ -173,15 +173,25 @@
   /* ═══════════════ CENTER ═══════════════ */
   #center { flex: 1; display: flex; flex-direction: column; min-width: 0; }
   .view { flex: 1; display: none; min-height: 0; }
-  .view.on { display: flex; }
+  .view.on { display: flex; flex-direction: column; }
 
   #graph {
-    flex: 1; position: relative;
+    flex: 1; position: relative; min-width: 0; min-height: 0;
     background:
       radial-gradient(ellipse at 50% 40%, rgba(21,33,56,.55), transparent 70%),
       radial-gradient(rgba(90,120,180,.13) 1px, transparent 1px);
     background-size: auto, 22px 22px;
   }
+  #g-diag {
+    position: absolute; top: 12px; right: 14px; z-index: 6; pointer-events: none;
+    font-size: 10px; line-height: 1.7; text-align: right; max-width: 360px;
+    color: var(--tx2); text-shadow: 0 1px 2px #000;
+  }
+  .gbtn {
+    background: var(--bg3); border: 1px solid var(--line2); color: var(--tx1);
+    padding: 3px 10px; border-radius: 4px; font-size: 10px; letter-spacing: .5px;
+  }
+  .gbtn:hover { color: var(--acc); border-color: rgba(53,224,161,.4); }
   #graph-msg {
     position: absolute; top: 14px; left: 16px; z-index: 5; color: var(--acc);
     background: rgba(8,13,22,.9); border: 1px solid rgba(53,224,161,.3);
@@ -406,6 +416,7 @@
           <label class="switch"><input type="checkbox" id="g-only-hot"><span class="track"></span>tylko HOT</label>
         </span>
         <span id="legend"></span>
+        <button class="gbtn" id="g-rerender" title="przebuduj graf">⟲ re-render</button>
         <span id="g-count"></span>
       </div>
     </div>
@@ -615,17 +626,37 @@ function loadVis() {
   });
   return visLoading;
 }
+
+/* diagnostyka grafu — widać na ekranie KAŻDY krok startu */
+function gdiag(msg, bad) {
+  let d = document.getElementById("g-diag");
+  if (!d) {
+    $("#graph").insertAdjacentHTML("beforeend", '<div id="g-diag"></div>');
+    d = document.getElementById("g-diag");
+  }
+  const t = new Date().toTimeString().slice(0, 8);
+  d.insertAdjacentHTML("beforeend", `<div>· ${t} — ${esc(msg)}</div>`);
+  d.style.color = bad ? "var(--bad)" : "var(--tx2)";
+}
+
 async function buildGraph() {
-  $("#graph-msg").textContent = "wczytywanie danych";
+  gdiag("start");
   try {
-    if (!GRAPH) GRAPH = await api("/api/graph");
+    if (!GRAPH) {
+      gdiag("fetch /api/graph");
+      GRAPH = await api("/api/graph");
+      gdiag(`dane OK: ${GRAPH.podmioty?.length ?? "?"} podmiotów`);
+    }
+    gdiag("ładowanie vis-network");
     await loadVis();
+    gdiag("vis OK, render");
     graphBuilt = true;
     renderGraph();
   } catch (e) {
-    $("#graph-msg").textContent = "graf: " + e.message;
+    gdiag("BŁĄD: " + e.message, true);
   }
 }
+
 function renderGraph() {
   const showD = $("#g-domeny").checked, showO = $("#g-osoby").checked, onlyHot = $("#g-only-hot").checked;
   const emailed = new Set(GRAPH.emailed || []);
@@ -675,13 +706,24 @@ function renderGraph() {
   }
   nodes = new vis.DataSet(n); edges = new vis.DataSet(e);
   const container = $("#graph");
+  const cw = container.clientWidth, ch = container.clientHeight;
+  gdiag(`węzły: ${n.length}, kontener: ${cw}×${ch}px`);
   if (!n.length) {
     container.innerHTML = '<div class="empty" style="position:absolute;inset:0">brak węzłów — rozluźnij filtry</div>';
     $("#g-count").textContent = "0 węzłów";
     return;
   }
+  // kontener o zerowym rozmiarze = vis narysuje 0×0 canvas („pusto”);
+  // czekamy 200ms i próbujemy raz jeszcze zanim poddamy diagnostykę
+  if (cw < 50 || ch < 50) {
+    gdiag("kontener spłaszczony — retry za 200ms", true);
+    setTimeout(() => renderGraph(), 200);
+    return;
+  }
   container.innerHTML = '<div id="graph-msg">stabilizacja</div><div class="scanline"></div>';
-  const network = new vis.Network(container, { nodes, edges }, {
+  let network;
+  try {
+    network = new vis.Network(container, { nodes, edges }, {
     autoResize: true,
     physics: {
       solver: "barnesHut",
@@ -691,7 +733,12 @@ function renderGraph() {
     interaction: { hover: true, tooltipDelay: 140, hideEdgesOnDrag: true },
     nodes: { shape: "box", font: { face: "JetBrains Mono, monospace" } },
     edges: { color: { color: "#1c2a44" }, smooth: false, selectionWidth: 1.5 },
-  });
+    });
+  } catch (err) {
+    gdiag("vis.Network throw: " + err.message, true);
+    return;
+  }
+  gdiag("Network utworzony");
   network.on("stabilizationProgress", (p) => {
     $("#graph-msg").textContent = `stabilizacja ${Math.round((p.iterations / p.total) * 100)}%`;
   });
@@ -717,8 +764,14 @@ function renderGraph() {
     }, 90);
   });
   window._graphRO.observe(container);
+  // po stabilizacji upewnij się, że canvas ma niezerowe wymiary
+  network.once("stabilizationIterationsDone", () => {
+    const cv = container.querySelector("canvas");
+    gdiag(cv ? `canvas: ${cv.clientWidth}×${cv.clientHeight}px` : "BRAK canvas w DOM!", !cv || cv.clientWidth < 10);
+  });
   $("#g-count").textContent = `${n.length} węzłów · ${e.length} krawędzi`;
 }
+$("#g-rerender").onclick = () => { GRAPH = null; buildGraph(); };
 
 /* ---------------- discovery ---------------- */
 async function runDiscover(q) {
