@@ -39,6 +39,19 @@
   }
   code { color: var(--cy); font-size: 11px; }
 
+  /* ciemny tooltip vis-network (domyślny jest biały — brzydki) */
+  div.vis-tooltip {
+    background: rgba(8,13,22,.96) !important;
+    border: 1px solid var(--line3) !important;
+    border-radius: 4px !important;
+    color: var(--tx0) !important;
+    font: 11px/1.5 var(--mono) !important;
+    padding: 6px 10px !important;
+    box-shadow: 0 8px 24px rgba(0,0,0,.6) !important;
+    white-space: pre-line !important;
+    backdrop-filter: blur(6px);
+  }
+
   /* ═══════════════ TOPBAR ═══════════════ */
   header {
     display: flex; align-items: stretch; height: 46px; flex-shrink: 0;
@@ -346,6 +359,7 @@
   <button data-tab="graph" class="on">Graf <span class="badge" id="b-graph">—</span></button>
   <button data-tab="tenders">Przetargi <span class="badge" id="b-tenders">0</span></button>
   <button data-tab="surface">Attack Surface <span class="badge" id="b-surface">0</span></button>
+  <button data-tab="discover">Discovery</button>
 </nav>
 
 <main>
@@ -401,6 +415,13 @@
       </tr></thead><tbody id="tenders-tb"></tbody></table>
     </div>
     <div class="view" id="view-surface"><div id="surface-out"></div></div>
+    <div class="view" id="view-discover" style="flex-direction:column">
+      <div style="display:flex;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line);align-items:center">
+        <input id="disc-in" class="inp" style="flex:1" placeholder="domena (zwik.szczecin.pl) · e-mail · firma · instytucja…" spellcheck="false">
+        <button id="disc-run" class="btn" style="color:var(--acc);border-color:rgba(53,224,161,.35);background:var(--acc2)">recon ▸</button>
+      </div>
+      <div id="disc-out" style="flex:1;overflow:auto;padding:14px 16px;font-size:11.5px;line-height:1.7"></div>
+    </div>
   </div>
 
   <div id="drawer">
@@ -542,6 +563,9 @@ async function showPodmiot(id) {
         d.osoby.map(o => `<div style="margin-bottom:3px"><span class="em" data-copy="${esc(o.email)}" title="klik = kopiuj">${esc(o.email)}</span>
           ${o.rola?`<span class="pill p-dim">${esc(o.rola)}</span>`:""}</div>`).join("") || "—"
       }</section>
+      <section><h3>akcje</h3>
+        <button class="btn" id="d-recon" style="width:100%" data-dom="${esc(d.domeny[0]?.nazwa || "")}">◉ recon (DNS + RDAP + crt.sh + WWW) → ontologia</button>
+      </section>
       <section><h3>interakcje · ${d.interakcje.length}</h3><ul class="tl">${
         d.interakcje.map(i => `<li><span class="t">${ts(i.ts)}</span>
           <span class="pill ${i.typ==="email_sent"?"p-ok":"p-dim"}">${esc(i.typ)}</span>
@@ -552,6 +576,16 @@ async function showPodmiot(id) {
   } catch (e) { toast(e.message, "err"); }
 }
 $("#drawer-close").onclick = () => { $("#drawer").classList.remove("on"); $$("#tbody tr").forEach(tr => tr.classList.remove("open")); };
+document.addEventListener("click", (ev) => {
+  const b = ev.target.closest("#d-recon");
+  if (b) {
+    const dom = b.dataset.dom;
+    if (!dom) return toast("podmiot nie ma domeny w grafie — użyj zakładki Discovery", "err");
+    document.querySelector('nav button[data-tab="discover"]').click();
+    $("#disc-in").value = dom;
+    $("#disc-run").click();
+  }
+});
 document.addEventListener("click", (ev) => {
   const em = ev.target.closest("[data-copy]");
   if (em) { navigator.clipboard?.writeText(em.dataset.copy); toast("skopiowano " + em.dataset.copy, "ok"); }
@@ -648,7 +682,7 @@ function renderGraph() {
     $("#graph-msg").textContent = `stabilizacja ${Math.round((p.iterations / p.total) * 100)}%`;
   });
   network.on("stabilizationIterationsDone", () => {
-    $("#graph-msg").remove();
+    $("#graph-msg")?.remove();
     container.querySelector(".scanline")?.remove();
     network.fit();
   });
@@ -656,8 +690,87 @@ function renderGraph() {
     const id = params.nodes[0];
     if (id && String(id).startsWith("p")) showPodmiot(Number(String(id).slice(1)));
   });
+  // vis nie widzi zmian rozmiaru kontenera (drawer/open) → obserwujemy sami
+  if (window._graphRO) window._graphRO.disconnect();
+  window._graphRO = new ResizeObserver(() => network.redraw());
+  window._graphRO.observe(container);
   $("#g-count").textContent = `${n.length} węzłów · ${e.length} krawędzi`;
 }
+
+/* ---------------- discovery ---------------- */
+async function runDiscover(q) {
+  const out = $("#disc-out");
+  out.innerHTML = '<span style="color:var(--tx2)">recon w toku — DNS → RDAP → crt.sh → WWW → search (może potrwać ~10-30s)…</span>';
+  try {
+    const d = await api("/api/discover", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ q }),
+    });
+    renderDiscovery(d);
+    loadStats(); // dane mogły wejść do grafu
+  } catch (e) {
+    out.innerHTML = `<span style="color:var(--bad)">✗ ${esc(e.message)}</span>`;
+  }
+}
+function renderDiscovery(d) {
+  const out = $("#disc-out");
+  const L = [];
+  const sec = (t) => L.push(`<div style="margin:14px 0 6px;color:var(--acc);font-size:9.5px;letter-spacing:2px;text-transform:uppercase;display:flex;gap:8px;align-items:center">${t}<span style="flex:1;height:1px;background:var(--line)"></span></div>`);
+  const kv = (k, v, cls) => v ? L.push(`<div><span style="color:var(--tx2);text-transform:uppercase;font-size:9.5px;letter-spacing:1px">${k}</span> <span class="${cls||""}" style="color:var(--tx0)">${v}</span></div>`) : null;
+  const list = (arr, cls) => (arr || []).map(x => `<div style="color:${cls||"var(--tx1)"};padding-left:12px">· ${esc(String(x))}</div>`).join("");
+
+  L.push(`<div style="color:var(--tx0);font-size:13px;margin-bottom:2px">${esc(d.query)}</div>`);
+  kv("typ", d.kind);
+  if (d.domain_guessed) kv("domena z search", d.domain_guessed, "");
+  if (d.domain) kv("domena", d.domain);
+
+  if (d.dns) {
+    sec("dns");
+    kv("A", (d.dns.a || []).join(", "));
+    kv("AAAA", (d.dns.aaaa || []).join(", "));
+    if (d.dns.mx?.length) { kv("MX", ""); L.push(list(d.dns.mx, "var(--cy)")); }
+    if (d.dns.ns?.length) { kv("NS", ""); L.push(list(d.dns.ns)); }
+    kv("SPF", (d.dns.spf || [])[0]);
+    kv("DMARC", (d.dns.dmarc || [])[0], d.dns.dmarc?.length ? "" : "");
+    if (!d.dns.has_mail) L.push('<div style="color:var(--warn)">⚠ brak MX — domena nie odbiera poczty</div>');
+    if (!d.dns.dmarc?.length) L.push('<div style="color:var(--bad)">◉ brak DMARC — spoofing możliwy (amunicja)</div>');
+  }
+  if (d.rdap && d.rdap !== null) {
+    sec("rdap / rejestracja");
+    kv("registrar", esc(d.rdap.registrar || "—"));
+    if (d.rdap.dates?.length) L.push(list(d.rdap.dates));
+    if (d.rdap.status?.length) kv("status", esc(d.rdap.status.join(", ")));
+  }
+  if (d.subdomains?.length) {
+    sec("subdomeny (crt.sh) · " + d.subdomains.length);
+    L.push(list(d.subdomains.slice(0, 40), "var(--cy)"));
+  }
+  const w = d.www;
+  if (w?.ok) {
+    sec("www · " + (w.url || ""));
+    kv("title", esc(w.title || "—"));
+    kv("opis", esc(w.description || "—"));
+    kv("cms/generator", esc(w.generator || "—"), w.generator ? "" : "");
+    if (w.emails?.length) { kv("emaile", ""); L.push(list(w.emails, "var(--cy)")); }
+    if (w.phones?.length) { kv("telefony", ""); L.push(list(w.phones)); }
+    if (w.persons?.length) { kv("osoby (wzorzec imie.nazwisko)", ""); L.push(list(w.persons, "var(--acc)")); }
+  } else if (w) {
+    sec("www");
+    L.push(`<div style="color:var(--tx2)">${esc(w.note || "brak odpowiedzi")}</div>`);
+  }
+  if (d.web_results?.results?.length) {
+    sec(`web · ${d.web_results.engine} · ${d.web_results.results.length}`);
+    for (const r of d.web_results.results.slice(0, 10)) {
+      L.push(`<div style="padding:3px 0"><a href="${esc(r.url)}" target="_blank" rel="noopener" style="color:var(--tx0)">${esc(r.title || r.url)}</a><div style="color:var(--tx3);font-size:10px;padding-left:12px">${esc(r.url)}</div></div>`);
+    }
+  } else if (d.web_results?.error) {
+    sec("web");
+    L.push(`<div style="color:var(--tx2)">search niedostępny: ${esc(d.web_results.error)}</div>`);
+  }
+  out.innerHTML = L.join("");
+}
+$("#disc-run").onclick = () => { const q = $("#disc-in").value.trim(); if (q) runDiscover(q); };
+$("#disc-in").addEventListener("keydown", (ev) => { if (ev.key === "Enter") $("#disc-run").click(); });
 ["#g-domeny", "#g-osoby", "#g-only-hot"].forEach(sel => $(sel).onchange = () => graphBuilt && renderGraph());
 
 /* ---------------- przetargi / attack surface ---------------- */
@@ -706,6 +819,7 @@ $$("nav button").forEach(b => b.onclick = () => {
   if (b.dataset.tab === "graph") buildGraph();
   if (b.dataset.tab === "tenders") loadTenders();
   if (b.dataset.tab === "surface") loadSurface();
+  if (b.dataset.tab === "discover") $("#disc-in").focus();
 });
 
 let deb;
@@ -731,6 +845,7 @@ document.addEventListener("keydown", (ev) => {
   const typing = ["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement.tagName);
   if (ev.key === "/" && !typing) { ev.preventDefault(); $("#q").focus(); }
   if (ev.key === "`" && !typing) { ev.preventDefault(); $("#dq-in").focus(); }
+  if (ev.key.toLowerCase() === "d" && !typing) { ev.preventDefault(); document.querySelector('nav button[data-tab="discover"]').click(); }
   if (ev.key === "Escape") $("#drawer-close").click();
   if (ev.key.toLowerCase() === "r" && !typing) $("#refresh").click();
 });

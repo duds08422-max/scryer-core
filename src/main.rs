@@ -21,6 +21,7 @@ fn main() {
         Some("ask") if args.len() >= 3 => cmd_ask(&args[2]),
         Some("viz") => cmd_viz(),
         Some("serve") => cmd_serve(),
+        Some("discover") if args.len() >= 3 => cmd_discover(&args[2]),
         Some("report") => println!("{}", send::report("outbox.jsonl")),
         Some("demo") => cmd_demo(),
         _ => {
@@ -35,6 +36,7 @@ fn main() {
             eprintln!("  scryer-core ask <zapytanie>                 (przykłady: hot-nodmarc | bez-kontaktu-30d | stats)");
             eprintln!("  scryer-core viz                              (graf ontologii -> HTML; SCRYER_VIZ=out.html)");
             eprintln!("  scryer-core serve                            (zywa konsola + API; SCRYER_DB, SCRYER_HOST=127.0.0.1, SCRYER_PORT=8787)");
+            eprintln!("  scryer-core discover <domena|email|fraza>    (OSINT: DNS+RDAP+crt.sh+WWW+search → ontologia; SCRYER_DNS, SCRYER_SEARCH_KEY)");
             eprintln!("  scryer-core demo");
             std::process::exit(2);
         }
@@ -180,6 +182,34 @@ fn cmd_ask(q: &str) {
             std::process::exit(2);
         }
     }
+}
+
+fn cmd_discover(q: &str) {
+    use scryer_core::discovery;
+    let query = discovery::normalize(q);
+    println!("discovery: {} (kind: {:?})", query.phrase, query.kind);
+    let rep = discovery::discover(&query);
+
+    // zapis do ontologii
+    let o = ontology::Ontology::open(&db_path()).expect("otwarcie ontologii");
+    let dom = rep["domain"].as_str().unwrap_or("");
+    if !dom.is_empty() {
+        let dns = &rep["dns"];
+        let pid = o.podmiot_id_by_domena(dom);
+        let has_mail = dns["has_mail"].as_bool().unwrap_or(false);
+        let _ = match pid {
+            Some(p) => o.upsert_domena(dom, has_mail, p),
+            None => o.upsert_domena_free(dom, has_mail),
+        };
+        o.set_domena_mail(
+            dom,
+            dns["spf"].as_array().and_then(|a| a[0].as_str()),
+            dns["dmarc"].as_array().and_then(|a| a[0].as_str()),
+        );
+        o.log_audyt("cli", "discover", dom);
+    }
+
+    println!("{}", serde_json::to_string_pretty(&rep).unwrap_or_default());
 }
 
 fn cmd_serve() {

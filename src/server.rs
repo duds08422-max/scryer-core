@@ -17,7 +17,10 @@ use axum::{
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
+
+/// Ścieżka DB dla spawn_blocking (discovery otwiera własne połączenie).
+static DB_PATH: OnceLock<PathBuf> = OnceLock::new();
 
 pub struct AppState {
     /// rusqlite Connection nie jest Sync — trzymamy za Mutexem.
@@ -53,6 +56,7 @@ fn lock_onto(s: &S) -> MutexGuard<'_, Ontology> {
 pub async fn serve(db: PathBuf, host: &str, port: u16) -> Result<(), String> {
     let onto = Ontology::open(&db).map_err(|e| e.to_string())?;
     onto.register_sql_functions();
+    let _ = DB_PATH.set(db.clone());
     let state = Arc::new(AppState { onto: Mutex::new(onto) });
 
     let app = Router::new()
@@ -64,6 +68,7 @@ pub async fn serve(db: PathBuf, host: &str, port: u16) -> Result<(), String> {
         .route("/api/query", post(api_query))
         .route("/api/tenders", get(api_tenders))
         .route("/api/graph", get(api_graph))
+        .route("/api/discover", post(api_discover))
         .route("/api/attack-surface", get(api_attack_surface))
         .with_state(state);
 
@@ -459,6 +464,116 @@ async fn api_attack_surface(State(s): State<S>) -> ApiResult {
         .map(|(nazwa, domena)| json!({ "nazwa": nazwa, "domena": domena }))
         .collect();
     Ok(Json(json!({ "count": items.len(), "items": items })))
+}
+
+// ------------------------------------------------------------- discover ---
+
+#[derive(Deserialize)]
+struct DiscoverBody {
+    q: String,
+}
+
+async fn api_discover(
+    State(s): State<S>,
+    Json(body): Json<DiscoverBody>,
+) -> ApiResult {
+    use crate::discovery;
+
+    let q = discovery::normalize(&body.q);
+    if q.domain.is_empty() && q.phrase.is_empty() {
+        return Err(AppError(StatusCode::BAD_REQUEST, "puste zapytanie".into()));
+    }
+
+    let db = DB_PATH
+        .get()
+        .cloned()
+        .ok_or_else(|| AppError(StatusCode::INTERNAL_SERVER_ERROR, "brak ścieżki DB".into()))?;
+
+    // sieciowe wołania poza async-ctx: osobne połączenie + spawn_blocking;
+    // serwer ma Mutex na głównym conn — discovery pisze przez własny handle
+    let res = tokio::task::spawn_blocking(move || {
+        let onto = crate::ontology::Ontology::open(&db).map_err(|e| e.to_string())?;
+        onto.register_sql_functions();
+        let report = discovery::discover(&q);
+        persist_discovery(&onto, &report);
+        Ok::<_, String>(report)
+    })
+    .await
+    .map_err(|e| AppError(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .map_err(|e| AppError(StatusCode::INTERNAL_SERVER_ERROR, e))?;
+
+    lock_onto(&s).log_audyt("console", "discover", &format!("{} → {}", body.q, res["domain"].as_str().unwrap_or("-")));
+
+    Ok(Json(res))
+}
+
+/// Zapis wyników discovery do ontologii (idempotentny).
+fn persist_discovery(onto: &crate::ontology::Ontology, rep: &Value) {
+    let dom = rep["domain"].as_str().unwrap_or("");
+    if dom.is_empty() {
+        return;
+    }
+    let dns = &rep["dns"];
+    let has_mail = dns["has_mail"].as_bool().unwrap_or(false);
+    let first = |k: &str| -> Option<&str> {
+        dns[k].as_array().and_then(|a| a.first()).and_then(|x| x.as_str())
+    };
+    let spf = first("spf");
+    let dmarc = first("dmarc");
+    let pid = onto.podmiot_id_by_domena(dom);
+
+    let dom_id = match pid {
+        Some(p) => onto.upsert_domena(dom, has_mail, p).unwrap_or(0),
+        None => onto.upsert_domena_free(dom, has_mail).unwrap_or(0),
+    };
+    let _ = dom_id;
+    onto.set_domena_mail(dom, spf, dmarc);
+
+    let www = &rep["www"];
+    if www["ok"].as_bool().unwrap_or(false) {
+        let title = www["title"].as_str().unwrap_or("");
+        let url = www["url"].as_str().unwrap_or("");
+        let desc = www["description"].as_str().unwrap_or("");
+        let phones = www["phones"].as_array().and_then(|a| a.first()).and_then(|x| x.as_str());
+        if let Some(p) = pid {
+            onto.fill_podmiot_meta(
+                p,
+                None,
+                Some(url),
+                Some(if desc.is_empty() { title } else { desc }),
+                phones,
+            );
+        }
+        // osoby z www tylko gdy znamy ownera (FK na podmiot_id)
+        if let Some(persons) = www["persons"].as_array() {
+            if let Some(p) = pid {
+                for em in persons.iter().filter_map(|x| x.as_str()) {
+                    let _ = onto.upsert_osoba_email(em, "web", p);
+                }
+            }
+        }
+        if let Some(emails) = www["emails"].as_array() {
+            if let Some(p) = pid {
+                for em in emails.iter().filter_map(|x| x.as_str()) {
+                    let _ = onto.upsert_osoba_email(em, "web", p);
+                }
+            }
+        }
+    }
+
+    // subdomeny z crt.sh → domeny w grafie (bez MX-checku — to by długo trwało)
+    if let Some(subs) = rep["subdomains"].as_array() {
+        for sd in subs.iter().filter_map(|x| x.as_str()).take(30) {
+            if sd != dom {
+                let _ = match pid {
+                    Some(p) => onto.upsert_domena(sd, false, p),
+                    None => onto.upsert_domena_free(sd, false),
+                };
+            }
+        }
+    }
+
+    onto.log_audyt("discovery", "recon", dom);
 }
 
 // -------------------------------------------------------------- konsola ---

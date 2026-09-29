@@ -8,6 +8,7 @@
 //!   * deterministyczny output + manifest sha256 (audit-ready, LOG PR7).
 
 pub mod bzp;
+pub mod discovery;
 pub mod dnsmini;
 pub mod enrich;
 pub mod export;

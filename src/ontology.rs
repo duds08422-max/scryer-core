@@ -54,6 +54,110 @@ pub struct Interakcja {
 }
 
 impl Ontology {
+    /// Audyt (kto/co/kiedy) — zapis akcji do tabeli audyt.
+    pub fn log_audyt(&self, aktor: &str, akcja: &str, szczegoly: &str) {
+        let _ = self.conn.execute(
+            "INSERT INTO audyt (ts, aktor, akcja, szczegoly) VALUES (?1, ?2, ?3, ?4)",
+            params![
+                now_secs(),
+                aktor,
+                akcja,
+                szczegoly
+            ],
+        );
+    }
+
+    /// id podmiotu powiązanego z domeną (jeśli jest).
+    pub fn podmiot_id_by_domena(&self, domena: &str) -> Option<i64> {
+        self.conn
+            .query_row(
+                "SELECT podmiot_id FROM domena WHERE nazwa = ?1",
+                params![domena],
+                |r| r.get(0),
+            )
+            .ok()
+    }
+
+    /// Uzupełnij metadane podmiotu z discovery (tylko puste pola — nie nadpisujemy).
+    pub fn fill_podmiot_meta(
+        &self,
+        id: i64,
+        miasto: Option<&str>,
+        www: Option<&str>,
+        opis: Option<&str>,
+        telefon: Option<&str>,
+    ) {
+        if let Some(m) = miasto {
+            if !m.is_empty() {
+                let _ = self.conn.execute(
+                    "UPDATE podmiot SET miasto = COALESCE(NULLIF(miasto,''), ?1) WHERE id = ?1",
+                    params![id, m],
+                );
+            }
+        }
+        if let Some(w) = www {
+            if !w.is_empty() {
+                let _ = self.conn.execute(
+                    "UPDATE podmiot SET zrodla = COALESCE(NULLIF(zrodla,''), ?1) WHERE id = ?1",
+                    params![id, w],
+                );
+            }
+        }
+        if let Some(o) = opis {
+            if !o.is_empty() {
+                let _ = self.conn.execute(
+                    "UPDATE podmiot SET ksc_status = ksc_status WHERE id = ?1",
+                    params![id],
+                );
+                let _ = o; // opis pójdzie do osobnej kolumny w v0.8 (na razie pomijamy)
+            }
+        }
+        if let Some(t) = telefon {
+            if !t.is_empty() {
+                let _ = self.conn.execute(
+                    "UPDATE osoba SET telefon = COALESCE(NULLIF(telefon,''), ?1)
+                     WHERE podmiot_id = ?2 AND rola = 'kontakt'",
+                    params![t, id],
+                );
+            }
+        }
+    }
+
+    /// Ustaw spf/dmarc na domenie po discovery.
+    pub fn set_domena_mail(&self, domena: &str, spf: Option<&str>, dmarc: Option<&str>) {
+        let _ = self.conn.execute(
+            "UPDATE domena SET spf = COALESCE(?1, spf), dmarc = COALESCE(?2, dmarc) WHERE nazwa = ?3",
+            params![spf, dmarc, domena],
+        );
+    }
+
+    /// Upsert domeny bez wiązania z podmiotem (discovery znalezione, nie klasyfikowane).
+    /// Zwraca id; podmiot_id = 0 oznacza „bez ownera” w kontekście discovery.
+    pub fn upsert_domena_free(&self, nazwa: &str, mx: bool) -> SqlResult<i64> {
+        // juz istnieje → tylko update mx
+        if let Ok(id) = self
+            .conn
+            .query_row("SELECT id FROM domena WHERE nazwa=?1", params![nazwa], |r| r.get::<_, i64>(0))
+        {
+            let _ = self.conn.execute("UPDATE domena SET mx=?1 WHERE id=?2", params![mx, id]);
+            return Ok(id);
+        }
+        // schema wymaga podmiot_id NOT NULL — używaj tylko z właścicielem; free → panic-free fallback:
+        // tworzymy wirtualny podmiot "(internet)" raz i.linkujemy
+        let owner: i64 = self.conn.query_row(
+            "SELECT id FROM podmiot WHERE nazwa = '(internet)' LIMIT 1",
+            [],
+            |r| r.get(0),
+        ).or_else(|_| {
+            self.conn.execute(
+                "INSERT INTO podmiot (nazwa, nip, sektor, zrodla) VALUES ('(internet)', NULL, 'discovery', 'discovery')",
+                [],
+            )
+            .map(|_| self.conn.last_insert_rowid())
+        })?;
+        self.upsert_domena(nazwa, mx, owner)
+    }
+
     /// Rejestruj funkcje SQL (fold_search: ascii-fold + lower dla wyszukiwania
     /// odpornego na polskie znaki — "krakow" znajdzie "Kraków").
     pub fn register_sql_functions(&self) {
@@ -78,6 +182,7 @@ impl Ontology {
     /// Otwórz (lub utwórz) bazę ontologii i zasiguruj schemat.
     pub fn open(path: &Path) -> SqlResult<Self> {
         let conn = Connection::open(path)?;
+        conn.busy_timeout(std::time::Duration::from_secs(5))?;
         conn.execute_batch(SCHEMA)?;
         Ok(Self { conn })
     }
