@@ -13,6 +13,7 @@ pub mod export;
 pub mod model;
 pub mod report;
 pub mod score;
+pub mod send;
 pub mod store;
 
 pub use model::{Hook, Lead, Sector};

@@ -7,7 +7,7 @@
 //!   demo                               — generuje seed demo i odpala score (dla leniwych)
 
 use scryer_core::model::Lead;
-use scryer_core::{export, score, store};
+use scryer_core::{export, score, send, store};
 use std::path::Path;
 
 fn main() {
@@ -15,11 +15,14 @@ fn main() {
     match args.get(1).map(String::as_str) {
         Some("score") if args.len() >= 3 => cmd_score(&args[2]),
         Some("briefs") if args.len() >= 4 => cmd_briefs(&args[2], &args[3]),
+        Some("send") if args.len() >= 3 => cmd_send(&args[2]),
         Some("demo") => cmd_demo(),
         _ => {
             eprintln!("użycie:");
             eprintln!("  scryer-core score <leads.json>              (SCRYER_OUT=plik.csv, SCRYER_DNS=serwer)");
             eprintln!("  scryer-core briefs <leads.json> <katalog>    (SCRYER_DNS=serwer)");
+            eprintln!("  scryer-core send <leads.json>                (DRY-RUN domyślnie; SCRYER_CONFIRM=yes = wyślij;");
+            eprintln!("                  SCRYER_RESEND_KEY=klucz, SCRYER_FROM=adres, SCRYER_DAILY_LIMIT=20, SCRYER_OUTBOX=outbox.jsonl)");
             eprintln!("  scryer-core demo");
             std::process::exit(2);
         }
@@ -80,6 +83,33 @@ fn cmd_briefs(path: &str, outdir: &str) {
 fn cmd_demo() {
     println!("seed demo: seed/leads-demo.json → score");
     cmd_score("seed/leads-demo.json");
+}
+
+fn cmd_send(path: &str) {
+    let raw = std::fs::read_to_string(path).unwrap_or_else(|e| panic!("nie mogę czytać {path}: {e}"));
+    let leads: Vec<Lead> = score::load_json(&raw).unwrap_or_else(|e| panic!("JSON: {e}"));
+    let (ranked, rep) = score::run(leads);
+    println!("scryer: {} — kampania (top {})", rep.line(), ranked.len());
+    let outbox = std::env::var("SCRYER_OUTBOX").unwrap_or_else(|_| "outbox.jsonl".into());
+    let records = send::run_campaign(&ranked, &outbox);
+    let (mut sent, mut dry, mut skip_mx, mut skip_lim, mut err) = (0, 0, 0, 0, 0);
+    for r in &records {
+        match r.status.as_str() {
+            "sent" => sent += 1,
+            "dry_run" => dry += 1,
+            "skipped_no_mx" => skip_mx += 1,
+            "skipped_limit" => skip_lim += 1,
+            _ => err += 1,
+        }
+    }
+    println!("sent={sent} dry_run={dry} skipped_no_mx={skip_mx} skipped_limit={skip_lim} errors={err}");
+    println!("audyt → {outbox}");
+    if dry > 0 {
+        println!("⚠ DRY-RUN: nic nie wyszło. Aby wysłać naprawdę: SCRYER_CONFIRM=yes");
+    }
+    for r in records.iter().take(10) {
+        println!("  [{:14}] {:40} {}", r.status, r.email, r.via);
+    }
 }
 
 fn slugify(s: &str) -> String {
