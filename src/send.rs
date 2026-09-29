@@ -195,7 +195,7 @@ pub fn send_one(cfg: &SendConfig, to_email: &str, subject: &str, body: &str) -> 
 pub fn run_campaign_graph(leads: &[Lead], outbox_path: &str) -> Vec<SendRecord> {
     let db = std::env::var("SCRYER_DB").unwrap_or_else(|_| "scryer.db".into());
     let graph = ontology::Ontology::open(std::path::Path::new(&db)).ok();
-    let mut records = run_campaign(leads, outbox_path);
+    let records = run_campaign(leads, outbox_path);
     if let Some(g) = &graph {
         for r in &records {
             if matches!(r.status.as_str(), "sent" | "dry_run") {

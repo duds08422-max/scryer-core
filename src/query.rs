@@ -12,7 +12,6 @@
 //!   przetargi[cpv~72,status=nowy]
 
 use crate::ontology::Ontology;
-use rusqlite::params;
 
 #[derive(Debug, PartialEq)]
 pub struct Filter {

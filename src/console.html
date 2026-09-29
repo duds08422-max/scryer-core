@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SCRYER — ontologia</title>
+<script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+<style>
+  :root {
+    --bg: #0a0e14; --panel: #10161f; --panel2: #151d29; --line: #1f2a3a;
+    --tx: #c9d4e3; --dim: #6b7a90; --acc: #4cc38a; --cy: #58c4dd;
+    --warn: #e3b341; --bad: #f85149; --hot: #ff7b54;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--tx);
+    font: 13px/1.45 "SF Mono", "Cascadia Code", Consolas, monospace;
+    height: 100vh; display: flex; flex-direction: column; overflow: hidden;
+  }
+  a { color: var(--cy); text-decoration: none; }
+
+  /* ---------- top bar ---------- */
+  header {
+    display: flex; align-items: center; gap: 14px; padding: 8px 14px;
+    background: var(--panel); border-bottom: 1px solid var(--line); flex-shrink: 0;
+  }
+  .logo { font-weight: 700; letter-spacing: 3px; color: var(--acc); font-size: 15px; }
+  .logo small { color: var(--dim); letter-spacing: 0; font-weight: 400; }
+  #dot { width: 8px; height: 8px; border-radius: 50%; background: var(--bad); display: inline-block; }
+  #dot.ok { background: var(--acc); box-shadow: 0 0 6px var(--acc); }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; }
+  .chip {
+    background: var(--panel2); border: 1px solid var(--line); border-radius: 3px;
+    padding: 2px 8px; font-size: 11px; color: var(--dim); cursor: pointer;
+  }
+  .chip b { color: var(--tx); font-size: 12px; }
+  .chip.hot b { color: var(--hot); }
+  .chip.bad b { color: var(--bad); }
+  .chip.acc b { color: var(--acc); }
+  .chip:hover { border-color: var(--cy); }
+  #refresh { margin-left: auto; background: none; border: 1px solid var(--line); color: var(--dim);
+    padding: 3px 10px; cursor: pointer; font: inherit; border-radius: 3px; }
+  #refresh:hover { color: var(--tx); border-color: var(--cy); }
+
+  /* ---------- tabs ---------- */
+  nav { display: flex; gap: 2px; padding: 6px 14px 0; background: var(--panel); border-bottom: 1px solid var(--line); flex-shrink: 0; }
+  nav button {
+    background: none; border: none; color: var(--dim); font: inherit; padding: 6px 14px;
+    cursor: pointer; border-bottom: 2px solid transparent;
+  }
+  nav button.on { color: var(--acc); border-bottom-color: var(--acc); }
+  nav button:hover { color: var(--tx); }
+
+  main { flex: 1; display: flex; min-height: 0; }
+
+  /* ---------- left: list ---------- */
+  #list-pane { width: 460px; min-width: 320px; display: flex; flex-direction: column; border-right: 1px solid var(--line); flex-shrink: 0; }
+  #filters { display: flex; gap: 6px; padding: 8px; background: var(--panel); flex-wrap: wrap; border-bottom: 1px solid var(--line); }
+  #filters input, #filters select {
+    background: var(--bg); border: 1px solid var(--line); color: var(--tx);
+    font: inherit; padding: 4px 8px; border-radius: 3px; outline: none;
+  }
+  #q { flex: 1; min-width: 140px; }
+  #filters input:focus, #filters select:focus { border-color: var(--cy); }
+  #list-meta { padding: 4px 10px; color: var(--dim); font-size: 11px; border-bottom: 1px solid var(--line); }
+  #rows { overflow-y: auto; flex: 1; }
+  table { width: 100%; border-collapse: collapse; }
+  th { position: sticky; top: 0; background: var(--panel2); color: var(--dim); font-size: 10px;
+    text-transform: uppercase; letter-spacing: 1px; text-align: left; padding: 5px 8px; cursor: pointer; }
+  th:hover { color: var(--cy); }
+  td { padding: 5px 8px; border-bottom: 1px solid #131b27; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 150px; }
+  tr.row:hover td { background: #16202e; cursor: pointer; }
+  .score { display: inline-block; min-width: 26px; text-align: center; border-radius: 2px; font-weight: 700; }
+  .s-hot { background: #3d1f14; color: var(--hot); }
+  .s-warm { background: #2b2a12; color: var(--warn); }
+  .s-cold { background: #14202b; color: var(--cy); }
+  .mailed { color: var(--acc); }
+
+  /* ---------- center tabs ---------- */
+  #center { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  .view { flex: 1; display: none; min-height: 0; }
+  .view.on { display: flex; }
+  #graph { flex: 1; background: var(--bg); }
+  #graph-msg { position: absolute; margin: 40px; color: var(--dim); }
+  .g-ctl { display: flex; gap: 8px; padding: 6px 10px; background: var(--panel); border-top: 1px solid var(--line); align-items: center; }
+  .g-ctl label { color: var(--dim); font-size: 11px; display: flex; gap: 4px; align-items: center; cursor: pointer; }
+
+  /* ---------- bottom: query console ---------- */
+  #console-pane { height: 240px; display: flex; flex-direction: column; border-top: 1px solid var(--line); background: var(--panel); flex-shrink: 0; }
+  #console-bar { display: flex; gap: 6px; padding: 6px 10px; align-items: center; border-bottom: 1px solid var(--line); }
+  #console-bar .tab { color: var(--dim); cursor: pointer; padding: 2px 8px; border-radius: 3px; font-size: 12px; }
+  #console-bar .tab.on { background: var(--panel2); color: var(--acc); }
+  #dq-in { flex: 1; background: var(--bg); border: 1px solid var(--line); color: var(--cy);
+    font: inherit; padding: 5px 10px; border-radius: 3px; outline: none; }
+  #dq-in:focus { border-color: var(--acc); }
+  #dq-run, .btn { background: var(--panel2); border: 1px solid var(--line); color: var(--tx);
+    padding: 5px 14px; cursor: pointer; font: inherit; border-radius: 3px; }
+  #dq-run:hover, .btn:hover { border-color: var(--acc); color: var(--acc); }
+  #console-out { flex: 1; overflow: auto; padding: 8px 12px; font-size: 12px; }
+  #console-out .err { color: var(--bad); }
+  #console-out .hint { color: var(--dim); }
+  #console-out .n { color: var(--acc); }
+  .ttable td, .ttable th { font-size: 12px; }
+
+  /* ---------- drawer ---------- */
+  #drawer {
+    width: 400px; background: var(--panel); border-left: 1px solid var(--line);
+    display: none; flex-direction: column; overflow-y: auto; flex-shrink: 0;
+  }
+  #drawer.on { display: flex; }
+  #drawer .head { padding: 12px 14px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--panel); }
+  #drawer .head h2 { font-size: 15px; color: var(--tx); margin-bottom: 4px; }
+  #drawer .head .sub { color: var(--dim); font-size: 11px; }
+  #drawer section { padding: 10px 14px; border-bottom: 1px solid var(--line); }
+  #drawer h3 { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--dim); margin-bottom: 6px; }
+  .kv { display: grid; grid-template-columns: 110px 1fr; gap: 2px 8px; font-size: 12px; }
+  .kv .k { color: var(--dim); }
+  .pill { display: inline-block; padding: 0 6px; border-radius: 2px; font-size: 11px; margin-right: 4px; }
+  .p-ok { background: #12291c; color: var(--acc); }
+  .p-bad { background: #2d1517; color: var(--bad); }
+  .p-dim { background: var(--panel2); color: var(--dim); }
+  .em { color: var(--cy); cursor: pointer; }
+  .em:hover { text-decoration: underline; }
+  .tl { list-style: none; font-size: 12px; }
+  .tl li { padding: 3px 0; border-bottom: 1px dashed #17202d; }
+  .tl .t { color: var(--dim); margin-right: 6px; }
+  #drawer-close { position: absolute; right: 10px; top: 10px; background: none; border: none;
+    color: var(--dim); font-size: 16px; cursor: pointer; }
+  #drawer-close:hover { color: var(--bad); }
+
+  #toast {
+    position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+    background: var(--panel2); border: 1px solid var(--bad); color: var(--tx);
+    padding: 8px 16px; border-radius: 4px; display: none; z-index: 99; max-width: 80%;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <span class="logo">SCRYER <small>// hartwell-labs ontologia</small></span>
+  <span id="dot" title="API status"></span>
+  <div class="chips" id="chips"></div>
+  <button id="refresh" title="odswiez (R)">⟳ refresh</button>
+</header>
+
+<nav>
+  <button data-tab="graph" class="on">GRAF</button>
+  <button data-tab="tenders">PRZETARGI</button>
+  <button data-tab="surface">ATTACK SURFACE</button>
+</nav>
+
+<main>
+  <div id="list-pane">
+    <div id="filters">
+      <input id="q" placeholder="szukaj: nazwa / miasto / nip / email / domena   ( / )" autocomplete="off">
+      <select id="f-sektor"><option value="">sektor: all</option></select>
+      <select id="f-kontakt">
+        <option value="">kontakt: all</option>
+        <option value="no">bez kontaktu</option>
+        <option value="yes">skontaktowani</option>
+      </select>
+      <select id="f-sort">
+        <option value="score">sort: score</option>
+        <option value="pop">sort: pop</option>
+        <option value="nazwa">sort: nazwa</option>
+        <option value="maile">sort: maile</option>
+      </select>
+    </div>
+    <div id="list-meta">—</div>
+    <div id="rows">
+      <table>
+        <thead><tr>
+          <th data-sort="score">SC</th><th data-sort="nazwa">PODMIOT</th>
+          <th data-sort="pop">POP</th><th>SEKTOR</th><th>MIASTO</th><th>MAIL</th>
+        </tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="center">
+    <div class="view on" id="view-graph">
+      <div id="graph" style="position:relative">
+        <div id="graph-msg">graf ontologii — wczytywanie…</div>
+      </div>
+      <div class="g-ctl">
+        <label><input type="checkbox" id="g-domeny" checked> domeny</label>
+        <label><input type="checkbox" id="g-osoby" checked> osoby</label>
+        <label><input type="checkbox" id="g-only-hot"> tylko HOT (score≥15)</label>
+        <label style="margin-left:auto" id="g-count">—</label>
+      </div>
+    </div>
+    <div class="view" id="view-tenders" style="overflow:auto">
+      <table class="ttable"><thead><tr>
+        <th>SC</th><th>TYTUL</th><th>ORG</th><th>DEADLINE</th><th>CPV</th><th></th>
+      </tr></thead><tbody id="tenders-tb"></tbody></table>
+    </div>
+    <div class="view" id="view-surface" style="overflow:auto">
+      <div id="surface-out" style="padding:12px"></div>
+    </div>
+  </div>
+
+  <div id="drawer"><div style="position:relative">
+    <button id="drawer-close">✕</button>
+    <div class="head"><h2 id="d-name">—</h2><div class="sub" id="d-sub"></div></div>
+    <div id="d-body"></div>
+  </div></div>
+</main>
+
+<div id="console-pane">
+  <div id="console-bar">
+    <span class="tab on" data-c="dq">dQuery</span>
+    <input id="dq-in" placeholder='podmioty[sektor=water,pop>100000] !interakcje[email_sent] limit 30' autocomplete="off">
+    <button id="dq-run">run ▸</button>
+    <button class="btn" id="dq-export">export jsonl</button>
+  </div>
+  <div id="console-out"><span class="hint">język zapytań: obiekt[filtr=wartość] !negacja limit N · obiekty: podmioty / przetargi / interakcje · "/`" fokusuje, Enter runuje</span></div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+"use strict";
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+
+const SECTOR_COLORS = {
+  water: "#58c4dd", health: "#f85149", admin: "#e3b341", education: "#b18ce8",
+  energy: "#ffa657", transport: "#39d2c0", gov: "#4cc38a", other: "#6b7a90",
+};
+const colorOf = (s) => SECTOR_COLORS[s] || SECTOR_COLORS.other;
+
+async function api(path, opts) {
+  const r = await fetch(path, opts);
+  if (!r.ok) {
+    let msg = r.status;
+    try { msg = (await r.json()).error || msg; } catch {}
+    throw new Error(msg);
+  }
+  return r.json();
+}
+function toast(msg) {
+  const t = $("#toast");
+  t.textContent = msg; t.style.display = "block";
+  clearTimeout(t._h); t._h = setTimeout(() => t.style.display = "none", 4000);
+}
+
+/* ---------------- stats ---------------- */
+async function loadStats() {
+  try {
+    const s = await api("/api/stats");
+    $("#dot").classList.add("ok");
+    $("#chips").innerHTML = [
+      ["podmioty", s.podmioty, ""], ["domeny", s.domeny, ""], ["osoby", s.osoby, ""],
+      ["przetargi", s.przetargi, ""], ["interakcje", s.interakcje, ""],
+      ["skontaktowani", s.skontaktowani, "acc"], ["HOT", s.hot, "hot"], ["bez DMARC", s.bez_dmarc, "bad"],
+    ].map(([k, v, cls]) => `<span class="chip ${cls}" data-chip="${k}">${k}: <b>${v}</b></span>`).join("");
+    const sel = $("#f-sektor");
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">sektor: all</option>' +
+      s.sektors.filter(x => x.sektor).map(x => `<option value="${esc(x.sektor)}">${esc(x.sektor)} (${x.n})</option>`).join("");
+    sel.value = cur;
+  } catch (e) { $("#dot").classList.remove("ok"); toast("API: " + e.message); }
+}
+
+/* ---------------- lista podmiotów ---------------- */
+let sortKey = "score";
+async function loadPodmioty() {
+  const p = new URLSearchParams();
+  if ($("#q").value.trim()) p.set("q", $("#q").value.trim());
+  if ($("#f-sektor").value) p.set("sektor", $("#f-sektor").value);
+  if ($("#f-kontakt").value) p.set("kontakt", $("#f-kontakt").value);
+  p.set("sort", sortKey); p.set("limit", "500");
+  $("#list-meta").textContent = "szukam…";
+  try {
+    const d = await api("/api/podmioty?" + p);
+    $("#list-meta").textContent = `${d.count} / ${d.total} podmiotów`;
+    $("#tbody").innerHTML = d.items.map(it => {
+      const cls = it.tier_score >= 15 ? "s-hot" : it.tier_score >= 8 ? "s-warm" : "s-cold";
+      return `<tr class="row" data-id="${it.id}">
+        <td><span class="score ${cls}">${it.tier_score}</span></td>
+        <td title="${esc(it.nazwa)}">${esc(it.nazwa)}</td>
+        <td>${it.pop ? fmtN(it.pop) : "—"}</td>
+        <td style="color:${colorOf(it.sektor)}">${esc(it.sektor || "—")}</td>
+        <td title="${esc(it.miasto)}">${esc(it.miasto || "—")}</td>
+        <td>${it.maile ? `<span class="mailed">●${it.maile}</span>` : "—"}</td>
+      </tr>`;
+    }).join("");
+  } catch (e) { $("#list-meta").textContent = "BŁĄD: " + e.message; }
+}
+const fmtN = (n) => n >= 1e6 ? (n/1e6).toFixed(1) + "M" : n >= 1e3 ? Math.round(n/1e3) + "k" : String(n);
+
+/* ---------------- drawer ---------------- */
+async function showPodmiot(id) {
+  try {
+    const d = await api("/api/podmiot/" + id);
+    const p = d.podmiot;
+    $("#d-name").textContent = p.nazwa;
+    $("#d-sub").innerHTML =
+      `<span class="score ${p.tier_score>=15?"s-hot":p.tier_score>=8?"s-warm":"s-cold"}">${p.tier_score}</span> ` +
+      `<span style="color:${colorOf(p.sektor)}">${esc(p.sektor||"—")}</span> · KSC: ${esc(p.ksc_status)}`;
+    const ts = (u) => u ? new Date(u*1000).toLocaleString("pl-PL") : "—";
+    $("#d-body").innerHTML = `
+      <section><h3>profil</h3><div class="kv">
+        <span class="k">NIP</span><span>${esc(p.nip)||"—"}</span>
+        <span class="k">miasto</span><span>${esc(p.miasto)||"—"}</span>
+        <span class="k">województwo</span><span>${esc(p.wojewodztwo)||"—"}</span>
+        <span class="k">populacja</span><span>${p.pop?fmtN(p.pop):"—"}</span>
+        <span class="k">źródła</span><span>${esc(p.zrodla)||"—"}</span>
+      </div></section>
+      <section><h3>domeny / poczta</h3>${
+        d.domeny.length ? d.domeny.map(x => `<div style="margin-bottom:4px">
+          <b>${esc(x.nazwa)}</b> ${x.mx?'<span class="pill p-ok">MX</span>':'<span class="pill p-dim">no-MX</span>'}
+          ${x.dmarc?'<span class="pill p-ok">DMARC</span>':'<span class="pill p-bad">bez DMARC</span>'}
+          ${x.spf?'':'<span class="pill p-bad">bez SPF</span>'}
+        </div>`).join("") : '<span class="hint">brak domen</span>'
+      }</section>
+      <section><h3>osoby (${d.osoby.length})</h3>${
+        d.osoby.map(o => `<div><span class="em" data-copy="${esc(o.email)}" title="kliknij = kopiuj">${esc(o.email)}</span>
+          <span class="pill p-dim">${esc(o.rola)||"—"}</span></div>`).join("") || "—"
+      }</section>
+      <section><h3>interakcje (${d.interakcje.length})</h3><ul class="tl">${
+        d.interakcje.map(i => `<li><span class="t">${ts(i.ts)}</span>
+          <span class="pill ${i.typ==="email_sent"?"p-ok":"p-dim"}">${esc(i.typ)}</span>
+          ${esc(i.email)} — ${esc(i.temat)}</li>`).join("") || "<li>—</li>"
+      }</ul></section>`;
+    $("#drawer").classList.add("on");
+  } catch (e) { toast(e.message); }
+}
+$("#drawer-close").onclick = () => $("#drawer").classList.remove("on");
+document.addEventListener("click", (ev) => {
+  const em = ev.target.closest("[data-copy]");
+  if (em) { navigator.clipboard?.writeText(em.dataset.copy); toast("skopiowano: " + em.dataset.copy); }
+});
+
+/* ---------------- graf ---------------- */
+let graphBuilt = false, GRAPH = null, nodes, edges;
+async function buildGraph() {
+  if (typeof vis === "undefined") {
+    $("#graph-msg").textContent = "brak vis-network (CDN offline) — lista i konsola działają dalej.";
+    return;
+  }
+  $("#graph-msg").textContent = "wczytywanie grafu…";
+  try {
+    GRAPH = await api("/api/graph");
+    graphBuilt = true;
+    renderGraph();
+  } catch (e) { $("#graph-msg").textContent = "błąd grafu: " + e.message; }
+}
+function renderGraph() {
+  const showD = $("#g-domeny").checked, showO = $("#g-osoby").checked, onlyHot = $("#g-only-hot").checked;
+  const emailed = new Set(GRAPH.emailed || []);
+  const n = [], e = [];
+  for (const p of GRAPH.podmioty) {
+    if (onlyHot && p.score < 15) continue;
+    n.push({ id: "p" + p.id, label: p.nazwa.length > 34 ? p.nazwa.slice(0, 33) + "…" : p.nazwa,
+      title: `${p.nazwa}\nscore: ${p.score}\nmiasto: ${p.miasto||"—"}`,
+      group: "podmiot", value: Math.max(3, Math.sqrt(p.pop || 1) / 12 + p.score / 3),
+      color: { background: colorOf(p.sektor), border: p.score >= 15 ? "#ff7b54" : "#0a0e14" },
+      font: { color: p.score >= 15 ? "#ff7b54" : "#c9d4e3", size: 12 }, _podmiot: p.id });
+  }
+  if (showD) for (const d of GRAPH.domeny) {
+    n.push({ id: "d" + d.id, label: d.nazwa, group: "domena", shape: "dot", size: 5,
+      color: { background: d.mx ? "#58c4dd" : "#3a4657" },
+      font: { size: 9, color: "#6b7a90" }, title: `${d.nazwa}\nMX: ${d.mx?"tak":"nie"}\nDMARC: ${d.dmarc||"BRAK"}` });
+    e.push({ from: "p" + d.podmiot_id, to: "d" + d.id, color: { color: "#1f2a3a" } });
+  }
+  if (showO) for (const o of GRAPH.osoby) {
+    const got = emailed.has(o.email);
+    n.push({ id: "o" + o.id, label: got ? "✉ " + o.email : o.email, group: "osoba", shape: "triangle", size: 4,
+      color: { background: got ? "#4cc38a" : "#2c3a4d" }, font: { size: 9, color: got ? "#4cc38a" : "#445468" }, title: o.email });
+    e.push({ from: "p" + o.podmiot_id, to: "o" + o.id, color: { color: "#17202d" } });
+  }
+  nodes = new vis.DataSet(n); edges = new vis.DataSet(e);
+  const container = $("#graph");
+  container.innerHTML = "";
+  const network = new vis.Network(container, { nodes, edges }, {
+    physics: { solver: "barnesHut", barnesHut: { gravitationalConstant: -6000, springLength: 90 }, stabilization: { iterations: 250 } },
+    interaction: { hover: true, tooltipDelay: 120 },
+    nodes: { shape: "box", margin: 5, borderWidth: 1, font: { face: "monospace" } },
+    edges: { color: { color: "#1f2a3a" } },
+  });
+  network.on("click", (params) => {
+    const id = params.nodes[0];
+    if (id && String(id).startsWith("p")) showPodmiot(Number(String(id).slice(1)));
+  });
+  $("#g-count").textContent = `${n.length} węzłów / ${e.length} krawędzi`;
+  $("#graph-msg").textContent = "";
+}
+["#g-domeny", "#g-osoby", "#g-only-hot"].forEach(sel => $(sel).onchange = () => graphBuilt && renderGraph());
+
+/* ---------------- przetargi / attack surface ---------------- */
+async function loadTenders() {
+  try {
+    const d = await api("/api/tenders");
+    $("#tenders-tb").innerHTML = d.items.map(t => `<tr class="row">
+      <td><span class="score ${t.match_score>=15?"s-hot":t.match_score>=8?"s-warm":"s-cold"}">${t.match_score}</span></td>
+      <td title="${esc(t.tytul)}"><a href="${esc(t.url)}" target="_blank" rel="noopener">${esc(t.tytul)}</a></td>
+      <td>${esc(t.org)}</td><td>${esc(t.deadline)}</td><td>${esc(t.cpv)}</td></tr>`).join("")
+      || '<tr><td colspan="6" class="hint">brak przetargów (import BZP/TED)</td></tr>';
+  } catch (e) { toast(e.message); }
+}
+async function loadSurface() {
+  try {
+    const d = await api("/api/attack-surface");
+    $("#surface-out").innerHTML = d.items.length
+      ? `<p style="color:var(--dim);margin-bottom:8px">HOT podmioty (score≥15) z domeną bez DMARC — gotowa amunicja pierwszego maila:</p>` +
+        d.items.map(x => `<div style="padding:3px 0">▸ <b>${esc(x.nazwa)}</b> — <span class="em">${esc(x.domena)}</span></div>`).join("")
+      : '<span class="hint">brak sygnałów — HOT-y z dziurawym DMARC-em się skończyły</span>';
+  } catch (e) { toast(e.message); }
+}
+
+/* ---------------- dQuery ---------------- */
+async function runQuery(q) {
+  const out = $("#console-out");
+  try {
+    const d = await api("/api/query", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ q }),
+    });
+    out.innerHTML = `<div><span class="n">${d.count}</span> wyników:</div>` +
+      d.rows.map(r => `<div>▸ ${esc(r)}</div>`).join("");
+  } catch (e) { out.innerHTML = `<div class="err">błąd: ${esc(e.message)}</div>`; }
+}
+
+/* ---------------- events ---------------- */
+document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
+  document.querySelectorAll("nav button").forEach(x => x.classList.remove("on"));
+  b.classList.add("on");
+  document.querySelectorAll(".view").forEach(v => v.classList.remove("on"));
+  $("#view-" + b.dataset.tab).classList.add("on");
+  if (b.dataset.tab === "graph") buildGraph();
+  if (b.dataset.tab === "tenders") loadTenders();
+  if (b.dataset.tab === "surface") loadSurface();
+});
+document.querySelectorAll("#console-bar .tab").forEach(b => b.onclick = () => {
+  document.querySelectorAll("#console-bar .tab").forEach(x => x.classList.remove("on"));
+  b.classList.add("on");
+});
+
+let deb;
+$("#q").addEventListener("input", () => { clearTimeout(deb); deb = setTimeout(loadPodmioty, 250); });
+["#f-sektor", "#f-kontakt"].forEach(s => $(s).onchange = loadPodmioty);
+document.querySelectorAll("th[data-sort]").forEach(th => th.onclick = () => { sortKey = th.dataset.sort; loadPodmioty(); });
+$("#tbody").addEventListener("click", (ev) => {
+  const tr = ev.target.closest("tr.row");
+  if (tr) showPodmiot(Number(tr.dataset.id));
+});
+$("#dq-run").onclick = () => { const q = $("#dq-in").value.trim(); if (q) runQuery(q); };
+$("#dq-in").addEventListener("keydown", (ev) => { if (ev.key === "Enter") $("#dq-run").click(); });
+$("#dq-export").onclick = () => {
+  const rows = [...$("#console-out").querySelectorAll("div")].map(d => d.textContent.replace(/^▸ /, ""));
+  if (!rows.length) return toast("nic do eksportu");
+  const blob = new Blob([rows.join("\n")], { type: "application/jsonl" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = "scryer-query.jsonl"; a.click();
+};
+$("#refresh").onclick = () => { loadStats(); loadPodmioty(); if (graphBuilt) buildGraph(); };
+document.addEventListener("keydown", (ev) => {
+  if (ev.key === "/" && document.activeElement.tagName !== "INPUT") { ev.preventDefault(); $("#q").focus(); }
+  if (ev.key === "Escape") $("#drawer").classList.remove("on");
+  if (ev.key.toLowerCase() === "r" && document.activeElement.tagName !== "INPUT") $("#refresh").click();
+});
+
+/* ---------------- boot ---------------- */
+loadStats();
+loadPodmioty();
+setInterval(loadStats, 30000);
+</script>
+</body>
+</html>

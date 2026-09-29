@@ -7,7 +7,7 @@
 //!   demo                               — generuje seed demo i odpala score (dla leniwych)
 
 use scryer_core::model::Lead;
-use scryer_core::{bzp, export, ontology, query, score, send, store, viz};
+use scryer_core::{bzp, export, ontology, query, score, send, server, store, viz};
 use std::path::Path;
 
 fn main() {
@@ -20,6 +20,7 @@ fn main() {
         Some("import") if args.len() >= 3 => cmd_import(&args[2..]),
         Some("ask") if args.len() >= 3 => cmd_ask(&args[2]),
         Some("viz") => cmd_viz(),
+        Some("serve") => cmd_serve(),
         Some("report") => println!("{}", send::report("outbox.jsonl")),
         Some("demo") => cmd_demo(),
         _ => {
@@ -33,6 +34,7 @@ fn main() {
             eprintln!("  scryer-core import <seeds...>               (migracja seedów/outboxu do ontologii; SCRYER_DB=scryer.db)");
             eprintln!("  scryer-core ask <zapytanie>                 (przykłady: hot-nodmarc | bez-kontaktu-30d | stats)");
             eprintln!("  scryer-core viz                              (graf ontologii -> HTML; SCRYER_VIZ=out.html)");
+            eprintln!("  scryer-core serve                            (zywa konsola + API; SCRYER_DB, SCRYER_HOST=127.0.0.1, SCRYER_PORT=8787)");
             eprintln!("  scryer-core demo");
             std::process::exit(2);
         }
@@ -180,6 +182,24 @@ fn cmd_ask(q: &str) {
     }
 }
 
+fn cmd_serve() {
+    let db = db_path();
+    if !db.exists() {
+        eprintln!("baza {} nie istnieje — najpierw `scryer-core import ...`", db.display());
+        std::process::exit(2);
+    }
+    let host = std::env::var("SCRYER_HOST").unwrap_or_else(|_| "127.0.0.1".into());
+    let port: u16 = std::env::var("SCRYER_PORT")
+        .ok()
+        .and_then(|p| p.parse().ok())
+        .unwrap_or(8787);
+    let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
+    if let Err(e) = rt.block_on(server::serve(db, &host, port)) {
+        eprintln!("serve: {e}");
+        std::process::exit(1);
+    }
+}
+
 fn cmd_viz() {
     let o = ontology::Ontology::open(&db_path()).expect("otwarcie ontologii");
     let out = std::env::var("SCRYER_VIZ").unwrap_or_else(|_| "ontology.html".into());
@@ -191,7 +211,7 @@ fn cmd_viz() {
 
 fn cmd_tenders(path: &str) {
     let raw = std::fs::read_to_string(path).unwrap_or_else(|e| panic!("nie mogę czytać {path}: {e}"));
-    let mut tenders = bzp::load(&raw).unwrap_or_else(|e| panic!("JSON: {e}"));
+    let tenders = bzp::load(&raw).unwrap_or_else(|e| panic!("JSON: {e}"));
     let mut rows: Vec<(u32, &bzp::Tender, Vec<String>)> = tenders
         .iter()
         .map(|t| {

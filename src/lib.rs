@@ -17,6 +17,7 @@ pub mod query;
 pub mod report;
 pub mod score;
 pub mod send;
+pub mod server;
 pub mod store;
 pub mod viz;
 

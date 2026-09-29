@@ -85,13 +85,20 @@ pub fn export_html(o: &Ontology, path: &str) -> Result<usize, String> {
         } else {
             nazwa.clone()
         };
+        let label_j = format!("\"{}\"", esc_json(&label));
+        let title_j = format!(
+            "\"{}\\n{} | {} | pop={} | score={} | maili={}\"",
+            esc_json(nazwa),
+            esc_json(sektor),
+            esc_json(miasto),
+            pop,
+            tier,
+            kontakty
+        );
+        let group_j = format!("\"{}\"", esc_json(sektor));
         nodes.push_str(&format!(
-            "{{id: {}, label: {}, title: {}, group: {}, value: {:.1}, shape: \"dot\", ",
-            id,
-            format!("\"{}\"", esc_json(&label)),
-            format!("\"{}\\n{} | {} | pop={} | score={} | maili={}\"", esc_json(nazwa), esc_json(sektor), esc_json(miasto), pop, tier, kontakty),
-            format!("\"{}\"", esc_json(sektor)),
-            size
+            "{{id: {}, label: {label_j}, title: {title_j}, group: {group_j}, value: {size:.1}, shape: \"dot\", ",
+            id
         ));
         nodes.push_str(&format!(
             "color: {{background: \"{}\", border: \"{}\", borderWidth: {}}},}},\n",
@@ -113,11 +120,10 @@ pub fn export_html(o: &Ontology, path: &str) -> Result<usize, String> {
     let mut dom_nodes = String::new();
     for (nazwa, _pid, mx, dmarc) in &domeny {
         let col = if *mx == 0 { "#334155" } else if dmarc.is_empty() { "#e5484d" } else { "#64748b" };
+        let label_j = format!("\"{}\"", esc_json(nazwa));
         dom_nodes.push_str(&format!(
-            "{{id: {}, label: {}, shape: \"box\", size: 6, color: {{background: \"#0f1420\", border: \"{}\"}}, font: {{size: 9, color: \"#8b93a7\"}}}},\n",
-            100000 + domeny.iter().position(|d| &d.0 == nazwa).map(|i| i as i64 + 1).unwrap_or(0),
-            format!("\"{}\"", esc_json(nazwa)),
-            col
+            "{{id: {}, label: {label_j}, shape: \"box\", size: 6, color: {{background: \"#0f1420\", border: \"{col}\"}}, font: {{size: 9, color: \"#8b93a7\"}}}},\n",
+            100000 + domeny.iter().position(|d| &d.0 == nazwa).map(|i| i as i64 + 1).unwrap_or(0)
         ));
     }
 

@@ -54,6 +54,27 @@ pub struct Interakcja {
 }
 
 impl Ontology {
+    /// Rejestruj funkcje SQL (fold_search: ascii-fold + lower dla wyszukiwania
+    /// odpornego na polskie znaki — "krakow" znajdzie "Kraków").
+    pub fn register_sql_functions(&self) {
+        use rusqlite::functions::FunctionFlags;
+        self.conn
+            .create_scalar_function(
+                "fold_search",
+                2,
+                FunctionFlags::SQLITE_UTF8 | FunctionFlags::SQLITE_DETERMINISTIC,
+                |ctx| {
+                    // NULL (np. pusty NIP) traktujemy jako pusty string — błąd tutaj
+                    // wywaliłby cały STEP zapytania i po cichu zerował wyniki.
+                    let a: Option<String> = ctx.get(0).unwrap_or(None);
+                    let b: Option<String> = ctx.get(1).unwrap_or(None);
+                    Ok(fold_search(&a.unwrap_or_default())
+                        .contains(&fold_search(&b.unwrap_or_default())))
+                },
+            )
+            .ok(); // idempotentne; kolizja = trudno, LIKE nadal działa
+    }
+
     /// Otwórz (lub utwórz) bazę ontologii i zasiguruj schemat.
     pub fn open(path: &Path) -> SqlResult<Self> {
         let conn = Connection::open(path)?;
@@ -110,7 +131,7 @@ impl Ontology {
              ON CONFLICT(nazwa) DO UPDATE SET mx=excluded.mx",
             params![nazwa, mx, podmiot_id],
         )?;
-        Ok(self.conn.query_row("SELECT id FROM domena WHERE nazwa=?1", params![nazwa], |r| r.get(0))?)
+        self.conn.query_row("SELECT id FROM domena WHERE nazwa=?1", params![nazwa], |r| r.get(0))
     }
 
     /// Zapis interakcji (kinetyka: wysłany/odebrany mail, notatka).
@@ -391,9 +412,37 @@ fn now_secs() -> i64 {
         .unwrap_or(0)
 }
 
+/// ASCII-fold + lowercase: ł→l, ó→o itd. Dla wyszukiwania bez diakrytyków.
+fn fold_search(s: &str) -> String {
+    s.chars()
+        .map(|c| match c {
+            'ą' | 'Ą' => 'a',
+            'ć' | 'Ć' => 'c',
+            'ę' | 'Ę' => 'e',
+            'ł' | 'Ł' => 'l',
+            'ń' | 'Ń' => 'n',
+            'ó' | 'Ó' => 'o',
+            'ś' | 'Ś' => 's',
+            'ź' | 'Ź' | 'ż' | 'Ż' => 'z',
+            c => c.to_ascii_lowercase(),
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn fold_search_folduje_polskie_znaki() {
+        let o = Ontology::open_memory().unwrap();
+        o.register_sql_functions();
+        let v: bool = o
+            .conn
+            .query_row("SELECT fold_search('Kraków', 'krakow')", [], |r| r.get(0))
+            .unwrap();
+        assert!(v, "krakow ma znalezc Kraków");
+    }
 
     #[test]
     fn open_memory_tworzy_schemat() {
