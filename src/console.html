@@ -4,254 +4,362 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SCRYER — ontologia</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230d1420'/%3E%3Ccircle cx='16' cy='16' r='7' fill='none' stroke='%233ddc97' stroke-width='2.5'/%3E%3Ccircle cx='16' cy='16' r='2.5' fill='%233ddc97'/%3E%3C/svg%3E">
-<!-- vis-network vendored lokalnie (/assets/vis-network.min.js) — zero CDN, działa offline -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23060a12'/%3E%3Ccircle cx='16' cy='16' r='8' fill='none' stroke='%2335e0a1' stroke-width='1.5' opacity='.9'/%3E%3Ccircle cx='16' cy='16' r='3' fill='%2335e0a1'/%3E%3Cpath d='M16 4v5M16 23v5M4 16h5M23 16h5' stroke='%2335e0a1' stroke-width='1.5'/%3E%3C/svg%3E">
 <style>
   :root {
-    --bg: #0b111b; --bg2: #0e1622; --panel: #101a29; --panel2: #16233a; --raise: #1b2b45;
-    --line: #1e2d45; --line2: #2a3d5c;
-    --tx: #dbe4f0; --tx2: #8fa1ba; --dim: #5d7089;
-    --acc: #3ddc97; --accdim: #1d5c40;
-    --cy: #4cc3ff; --warn: #e8b64c; --hot: #ff7a59; --bad: #ff5d6c;
-    --mono: ui-monospace, "JetBrains Mono", "Cascadia Code", "SF Mono", Menlo, Consolas, monospace;
-    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --bg0: #05070c; --bg1: #080d16; --bg2: #0c1320; --bg3: #111a2c; --bg4: #16223a;
+    --line: rgba(140,170,230,.07); --line2: rgba(140,170,230,.14); --line3: rgba(140,170,230,.24);
+    --tx0: #e9eff9; --tx1: #a8b6cf; --tx2: #66789a; --tx3: #3d4d6b;
+    --acc: #35e0a1; --acc2: rgba(53,224,161,.12);
+    --cy: #55c8ff; --cy2: rgba(85,200,255,.1);
+    --warn: #f0b64e; --warn2: rgba(240,182,78,.1);
+    --hot: #ff7d5c; --hot2: rgba(255,125,92,.12);
+    --bad: #ff5470; --bad2: rgba(255,84,112,.1);
+    --mono: "JetBrains Mono", "Cascadia Code", "SF Mono", "Fira Code", Menlo, Consolas, monospace;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { height: 100%; }
   body {
-    background: var(--bg); color: var(--tx);
-    font: 13.5px/1.5 var(--sans);
+    background: var(--bg0); color: var(--tx0);
+    font: 12.5px/1.5 var(--mono);
     display: flex; flex-direction: column; overflow: hidden;
+    -webkit-font-smoothing: antialiased;
   }
-  ::-webkit-scrollbar { width: 10px; height: 10px; }
-  ::-webkit-scrollbar-thumb { background: var(--line2); border-radius: 5px; border: 2px solid var(--bg); }
-  ::-webkit-scrollbar-track { background: transparent; }
+  ::selection { background: rgba(53,224,161,.25); }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { background: #1c2a44; border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: #2a3d61; }
+  ::-webkit-scrollbar-corner { background: transparent; }
   a { color: var(--cy); text-decoration: none; }
-  a:hover { text-decoration: underline; }
-  button { font: inherit; cursor: pointer; }
-
-  /* ───────────── header ───────────── */
-  header {
-    display: flex; align-items: center; gap: 16px; padding: 10px 18px;
-    background: linear-gradient(180deg, var(--panel), var(--bg2));
-    border-bottom: 1px solid var(--line); flex-shrink: 0;
+  a:hover { text-decoration: underline; text-underline-offset: 3px; }
+  button { font: inherit; cursor: pointer; background: none; border: none; color: inherit; }
+  kbd {
+    background: var(--bg3); border: 1px solid var(--line3); border-bottom-width: 2px;
+    border-radius: 3px; padding: 0 4px; font-size: 10px; color: var(--tx1);
   }
-  .logo { display: flex; align-items: baseline; gap: 9px; white-space: nowrap; }
-  .logo b { font: 700 16px/1 var(--mono); letter-spacing: 4px; color: var(--acc); }
-  .logo span { color: var(--dim); font-size: 11.5px; }
-  #dot { width: 9px; height: 9px; border-radius: 50%; background: var(--bad); flex-shrink: 0; transition: all .3s; }
-  #dot.ok { background: var(--acc); box-shadow: 0 0 8px var(--acc); }
+  code { color: var(--cy); font-size: 11px; }
 
-  /* stat tiles */
-  #stats { display: flex; gap: 6px; flex: 1; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+  /* ═══════════════ TOPBAR ═══════════════ */
+  header {
+    display: flex; align-items: stretch; height: 46px; flex-shrink: 0;
+    background: linear-gradient(180deg, #0d1524, #080d16);
+    border-bottom: 1px solid var(--line3);
+  }
+  .brand {
+    display: flex; align-items: center; gap: 10px; padding: 0 16px;
+    border-right: 1px solid var(--line); background: rgba(53,224,161,.03);
+  }
+  .brand svg { display: block; }
+  .brand .word { font-weight: 700; font-size: 14px; letter-spacing: 5px; color: var(--tx0); }
+  .brand .word em { color: var(--acc); font-style: normal; }
+  .brand .ver { font-size: 9px; color: var(--tx3); letter-spacing: 1px; align-self: flex-start; margin-top: 9px; }
+
+  #stats { display: flex; align-items: stretch; flex: 1; min-width: 0; overflow-x: auto; scrollbar-width: none; }
   #stats::-webkit-scrollbar { display: none; }
   .stat {
-    background: var(--panel2); border: 1px solid var(--line); border-radius: 8px;
-    padding: 4px 12px; text-align: center; white-space: nowrap; min-width: 64px;
+    display: flex; flex-direction: column; justify-content: center; gap: 1px;
+    padding: 0 14px; border-right: 1px solid var(--line); min-width: 74px; position: relative;
   }
-  .stat .v { font: 600 15px/1.2 var(--mono); color: var(--tx); }
-  .stat .k { font-size: 9.5px; text-transform: uppercase; letter-spacing: .8px; color: var(--dim); }
-  .stat.acc .v { color: var(--acc); }
-  .stat.hot .v { color: var(--hot); }
-  .stat.bad .v { color: var(--bad); }
+  .stat .v { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -.5px; }
+  .stat .k { font-size: 8.5px; text-transform: uppercase; letter-spacing: 1.6px; color: var(--tx2); }
+  .stat .v { color: var(--tx0); }
+  .stat.acc .v { color: var(--acc); } .stat.acc .k { color: rgba(53,224,161,.55); }
+  .stat.hot .v { color: var(--hot); } .stat.hot .k { color: rgba(255,125,92,.55); }
+  .stat.bad .v { color: var(--bad); } .stat.bad .k { color: rgba(255,84,112,.55); }
   .stat.warn .v { color: var(--warn); }
 
-  #refresh {
-    background: var(--panel2); color: var(--tx2); border: 1px solid var(--line);
-    padding: 6px 14px; border-radius: 8px; white-space: nowrap; transition: all .15s;
+  .topright { display: flex; align-items: center; gap: 0; border-left: 1px solid var(--line); }
+  .clock {
+    padding: 0 14px; font-size: 11px; color: var(--tx2); letter-spacing: 1px;
+    font-variant-numeric: tabular-nums; border-right: 1px solid var(--line); display: flex; align-items: center; gap: 7px;
   }
-  #refresh:hover { color: var(--acc); border-color: var(--accdim); background: var(--raise); }
+  .clock b { color: var(--tx1); font-weight: 500; }
+  .live { display: flex; align-items: center; gap: 6px; padding: 0 12px; font-size: 9px; letter-spacing: 1.6px; color: var(--tx2); text-transform: uppercase; }
+  #dot { width: 7px; height: 7px; border-radius: 50%; background: var(--bad); position: relative; }
+  #dot.ok { background: var(--acc); }
+  #dot.ok::after { content: ""; position: absolute; inset: -3px; border-radius: 50%; border: 1px solid var(--acc); opacity: .5; animation: ping 2s ease-out infinite; }
+  @keyframes ping { 0% { transform: scale(.6); opacity: .7; } 100% { transform: scale(1.6); opacity: 0; } }
+  #refresh { padding: 0 16px; color: var(--tx2); border-left: 1px solid var(--line); transition: all .15s; font-size: 11px; letter-spacing: 1px; }
+  #refresh:hover { color: var(--acc); background: var(--acc2); }
 
-  /* ───────────── tabs ───────────── */
-  nav { display: flex; gap: 6px; padding: 8px 18px; background: var(--bg2); border-bottom: 1px solid var(--line); flex-shrink: 0; }
+  /* ═══════════════ TABS ═══════════════ */
+  nav { display: flex; align-items: stretch; height: 34px; padding: 0 8px; background: var(--bg1); border-bottom: 1px solid var(--line); flex-shrink: 0; }
   nav button {
-    background: transparent; border: 1px solid transparent; color: var(--tx2);
-    padding: 5px 16px; border-radius: 7px; font-weight: 500; letter-spacing: .5px; transition: all .15s;
+    position: relative; padding: 0 18px; color: var(--tx2); font-size: 11px;
+    letter-spacing: 1.2px; text-transform: uppercase; transition: color .15s;
+    display: flex; align-items: center; gap: 7px;
   }
-  nav button:hover { color: var(--tx); background: var(--panel2); }
-  nav button.on { color: var(--acc); background: var(--panel2); border-color: var(--accdim); }
+  nav button:hover { color: var(--tx0); }
+  nav button.on { color: var(--acc); }
+  nav button.on::after { content: ""; position: absolute; left: 12px; right: 12px; bottom: -1px; height: 2px; background: var(--acc); box-shadow: 0 0 8px var(--acc); }
+  nav .badge {
+    font-size: 9px; padding: 1px 5px; border-radius: 3px; min-width: 16px; text-align: center;
+    background: var(--bg3); color: var(--tx2); border: 1px solid var(--line2); font-variant-numeric: tabular-nums;
+  }
+  nav button.on .badge { color: var(--acc); border-color: rgba(53,224,161,.3); background: var(--acc2); }
 
   main { flex: 1; display: flex; min-height: 0; }
 
-  /* ───────────── left: list ───────────── */
-  #list-pane { width: 480px; min-width: 340px; display: flex; flex-direction: column; border-right: 1px solid var(--line); flex-shrink: 0; background: var(--bg2); }
-  #filters { display: flex; gap: 7px; padding: 10px 12px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
-  #filters input, #filters select {
-    background: var(--panel); border: 1px solid var(--line); color: var(--tx);
-    font: 13px var(--sans); padding: 7px 10px; border-radius: 8px; outline: none; transition: border-color .15s;
+  /* ═══════════════ LEFT LIST ═══════════════ */
+  #list-pane { width: 470px; min-width: 340px; display: flex; flex-direction: column; border-right: 1px solid var(--line3); flex-shrink: 0; background: var(--bg1); }
+  .pane-label {
+    display: flex; align-items: center; gap: 8px; padding: 8px 14px;
+    font-size: 9px; letter-spacing: 2px; text-transform: uppercase; color: var(--tx2);
+    border-bottom: 1px solid var(--line); background: var(--bg2);
   }
-  #filters select { padding: 7px 6px; }
+  .pane-label::before { content: ""; width: 6px; height: 6px; background: var(--acc); clip-path: polygon(0 0, 100% 50%, 0 100%); }
+  .pane-label .right { margin-left: auto; letter-spacing: .5px; color: var(--tx3); }
+
+  #filters { display: flex; gap: 6px; padding: 9px 12px; border-bottom: 1px solid var(--line); flex-wrap: wrap; background: var(--bg1); }
+  .inp {
+    background: var(--bg0); border: 1px solid var(--line2); color: var(--tx0);
+    font: 12px var(--mono); padding: 6px 9px; border-radius: 4px; outline: none;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  .inp::placeholder { color: var(--tx3); }
+  .inp:focus { border-color: var(--acc); box-shadow: 0 0 0 1px rgba(53,224,161,.25); }
+  select.inp { padding: 6px 4px; cursor: pointer; }
+  select.inp option { background: var(--bg2); }
   #q { flex: 1; min-width: 150px; }
-  #q::placeholder { color: var(--dim); }
-  #filters input:focus, #filters select:focus { border-color: var(--cy); }
-  #list-meta { padding: 6px 14px; color: var(--dim); font-size: 11.5px; border-bottom: 1px solid var(--line); }
+
+  #list-meta { padding: 5px 14px; color: var(--tx2); font-size: 10px; letter-spacing: .8px; text-transform: uppercase; border-bottom: 1px solid var(--line); background: var(--bg1); }
+  #list-meta b { color: var(--acc); font-weight: 600; }
+
   #rows { overflow-y: auto; flex: 1; }
   #rows table { width: 100%; border-collapse: collapse; table-layout: fixed; }
   th {
-    position: sticky; top: 0; z-index: 2; background: var(--panel); color: var(--dim);
-    font-size: 10px; text-transform: uppercase; letter-spacing: 1px; font-weight: 600;
-    text-align: left; padding: 7px 8px; user-select: none;
+    position: sticky; top: 0; z-index: 2; background: var(--bg2); color: var(--tx2);
+    font-size: 9px; text-transform: uppercase; letter-spacing: 1.4px; font-weight: 500;
+    text-align: left; padding: 6px 8px; user-select: none; border-bottom: 1px solid var(--line3);
   }
   th[data-sort]:hover { color: var(--cy); cursor: pointer; }
-  th.c-sc, th.c-pop, th.c-mail { width: 52px; }
-  th.c-sektor { width: 96px; }
-  th.c-miasto { width: 110px; }
-  td { padding: 7px 8px; border-bottom: 1px solid #131d2e; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  tr.row { cursor: pointer; transition: background .1s; }
-  tr.row:hover td { background: var(--panel2); }
-  tr.row.open td { background: var(--raise); }
-  .score {
-    display: inline-block; min-width: 30px; text-align: center; padding: 1px 0;
-    border-radius: 5px; font: 700 12px/1.5 var(--mono);
-  }
-  .s-hot  { background: rgba(255,122,89,.14); color: var(--hot); }
-  .s-warm { background: rgba(232,182,76,.13); color: var(--warn); }
-  .s-cold { background: rgba(76,195,255,.12); color: var(--cy); }
-  .sektor-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: baseline; }
-  .mailed { color: var(--acc); font: 600 11.5px var(--mono); }
-  .nomail { color: #2c3b52; }
+  th.c-sc, th.c-pop, th.c-mail { width: 50px; }
+  th.c-sektor { width: 92px; }
+  th.c-miasto { width: 104px; }
+  td { padding: 6px 8px; border-bottom: 1px solid var(--line); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--tx1); }
+  tr.row { cursor: pointer; transition: background .1s; box-shadow: inset 2px 0 0 transparent; }
+  tr.row:hover { background: var(--bg3); box-shadow: inset 2px 0 0 var(--cy); }
+  tr.row.open { background: var(--bg4); box-shadow: inset 2px 0 0 var(--acc); }
+  tr.row.open td { color: var(--tx0); }
+  td.c-name { color: var(--tx0); }
 
-  /* ───────────── center ───────────── */
+  .score {
+    display: inline-flex; align-items: center; justify-content: center; min-width: 32px; height: 18px;
+    border-radius: 3px; font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums;
+    border: 1px solid transparent;
+  }
+  .s-hot  { background: var(--hot2); color: var(--hot); border-color: rgba(255,125,92,.35); }
+  .s-warm { background: var(--warn2); color: var(--warn); border-color: rgba(240,182,78,.3); }
+  .s-cold { background: var(--cy2); color: var(--cy); border-color: rgba(85,200,255,.25); }
+  .s-zero { background: var(--bg3); color: var(--tx2); border-color: var(--line2); }
+
+  .sektor-dot { display: inline-block; width: 7px; height: 7px; border-radius: 2px; margin-right: 6px; }
+  .mailed { color: var(--acc); font-size: 11px; }
+  .nomail { color: var(--tx3); }
+
+  /* ═══════════════ CENTER ═══════════════ */
   #center { flex: 1; display: flex; flex-direction: column; min-width: 0; }
   .view { flex: 1; display: none; min-height: 0; }
   .view.on { display: flex; }
+
   #graph {
     flex: 1; position: relative;
-    background-image: radial-gradient(#131d2e 1px, transparent 1px);
-    background-size: 24px 24px;
+    background:
+      radial-gradient(ellipse at 50% 40%, rgba(21,33,56,.55), transparent 70%),
+      radial-gradient(rgba(90,120,180,.13) 1px, transparent 1px);
+    background-size: auto, 22px 22px;
   }
   #graph-msg {
-    position: absolute; top: 18px; left: 20px; z-index: 5; color: var(--tx2);
-    background: rgba(16,26,41,.92); border: 1px solid var(--line); padding: 6px 14px; border-radius: 8px;
-    font: 12.5px var(--mono);
+    position: absolute; top: 14px; left: 16px; z-index: 5; color: var(--acc);
+    background: rgba(8,13,22,.9); border: 1px solid rgba(53,224,161,.3);
+    padding: 5px 12px; border-radius: 4px; font-size: 11px; letter-spacing: .5px;
+    backdrop-filter: blur(6px);
   }
+  #graph-msg::before { content: "▍"; animation: blink 1s steps(1) infinite; margin-right: 6px; }
+  @keyframes blink { 50% { opacity: 0; } }
+  .scanline {
+    position: absolute; left: 0; right: 0; height: 2px; z-index: 4; pointer-events: none;
+    background: linear-gradient(90deg, transparent, rgba(53,224,161,.5), transparent);
+    animation: scan 2.2s linear infinite;
+  }
+  @keyframes scan { 0% { top: 0; } 100% { top: 100%; } }
+
   .g-ctl {
-    display: flex; gap: 14px; align-items: center; padding: 8px 16px;
-    background: var(--bg2); border-top: 1px solid var(--line); flex-wrap: wrap;
+    display: flex; gap: 16px; align-items: center; padding: 0 16px; height: 38px;
+    background: var(--bg1); border-top: 1px solid var(--line3); flex-wrap: wrap;
   }
-  .g-ctl .tgl { display: flex; gap: 14px; }
-  .g-ctl label { color: var(--tx2); font-size: 12.5px; display: flex; gap: 6px; align-items: center; cursor: pointer; user-select: none; }
-  .g-ctl input[type=checkbox] { accent-color: var(--acc); }
-  #legend { display: flex; gap: 12px; align-items: center; padding-left: 14px; border-left: 1px solid var(--line); }
-  #legend .lg { display: flex; gap: 5px; align-items: center; color: var(--tx2); font-size: 11.5px; }
-  #legend .lg i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
-  #g-count { margin-left: auto; color: var(--dim); font: 11.5px var(--mono); }
+  .tgl { display: flex; gap: 14px; }
+  .switch { display: flex; align-items: center; gap: 7px; cursor: pointer; user-select: none; color: var(--tx2); font-size: 11px; letter-spacing: .5px; transition: color .15s; }
+  .switch:hover { color: var(--tx0); }
+  .switch input { display: none; }
+  .switch .track {
+    width: 26px; height: 14px; border-radius: 7px; background: var(--bg3);
+    border: 1px solid var(--line3); position: relative; transition: all .18s;
+  }
+  .switch .track::after {
+    content: ""; position: absolute; top: 1px; left: 1px; width: 10px; height: 10px;
+    border-radius: 50%; background: var(--tx2); transition: all .18s;
+  }
+  .switch input:checked + .track { background: var(--acc2); border-color: rgba(53,224,161,.5); }
+  .switch input:checked + .track::after { left: 13px; background: var(--acc); box-shadow: 0 0 6px rgba(53,224,161,.6); }
+
+  #legend { display: flex; gap: 11px; align-items: center; padding-left: 14px; border-left: 1px solid var(--line2); }
+  #legend .lg { display: flex; gap: 5px; align-items: center; color: var(--tx2); font-size: 10px; letter-spacing: .5px; }
+  #legend .lg i { width: 7px; height: 7px; border-radius: 2px; display: inline-block; }
+  #g-count { margin-left: auto; color: var(--tx3); font-size: 10px; letter-spacing: 1px; font-variant-numeric: tabular-nums; }
 
   /* przetargi / surface */
-  #view-tenders, #view-surface { overflow: auto; background: var(--bg2); }
+  #view-tenders, #view-surface { overflow: auto; background: var(--bg1); }
   .ttable { width: 100%; border-collapse: collapse; }
-  .ttable th { position: sticky; top: 0; background: var(--panel); color: var(--dim); font-size: 10px; text-transform: uppercase; letter-spacing: 1px; text-align: left; padding: 8px 12px; }
-  .ttable td { padding: 8px 12px; border-bottom: 1px solid #131d2e; font-size: 13px; }
-  #surface-out { padding: 18px; }
-  .surface-row { padding: 6px 0; border-bottom: 1px solid #131d2e; display: flex; gap: 10px; align-items: baseline; }
-  .surface-row .dom { font: 12.5px var(--mono); color: var(--cy); }
-  .hintbox { color: var(--tx2); background: var(--panel); border: 1px dashed var(--line2); border-radius: 10px; padding: 18px; margin-bottom: 12px; font-size: 13px; }
+  .ttable th { position: sticky; top: 0; background: var(--bg2); color: var(--tx2); font-size: 9px; text-transform: uppercase; letter-spacing: 1.4px; text-align: left; padding: 7px 12px; border-bottom: 1px solid var(--line3); }
+  .ttable td { padding: 7px 12px; border-bottom: 1px solid var(--line); font-size: 12px; color: var(--tx1); }
+  .ttable td a { color: var(--tx0); }
+  .ttable td a:hover { color: var(--cy); }
+  #surface-out { padding: 16px; }
+  .surface-row {
+    padding: 8px 12px; border-bottom: 1px solid var(--line); display: flex; gap: 14px;
+    align-items: baseline; transition: background .1s;
+  }
+  .surface-row:hover { background: var(--bg2); }
+  .surface-row b { color: var(--tx0); font-weight: 500; }
+  .surface-row .dom { font-size: 11.5px; color: var(--bad); }
+  .surface-row .dom::before { content: "◉ "; font-size: 8px; }
+  .callout {
+    display: flex; gap: 10px; color: var(--tx1); background: var(--bg2);
+    border: 1px solid var(--line2); border-left: 2px solid var(--acc);
+    border-radius: 4px; padding: 10px 14px; margin-bottom: 14px; font-size: 11.5px; line-height: 1.6;
+  }
+  .callout.dim { border-left-color: var(--tx3); color: var(--tx2); }
 
-  /* ───────────── drawer ───────────── */
+  /* ═══════════════ DRAWER ═══════════════ */
   #drawer {
-    width: 420px; background: var(--panel); border-left: 1px solid var(--line);
+    width: 420px; background: rgba(12,19,32,.97); border-left: 1px solid var(--line3);
     display: none; flex-direction: column; overflow-y: auto; flex-shrink: 0;
-    box-shadow: -12px 0 32px rgba(0,0,0,.35);
+    backdrop-filter: blur(10px); box-shadow: -20px 0 40px rgba(0,0,0,.5);
   }
   #drawer.on { display: flex; }
-  #drawer .head { padding: 16px 18px 12px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--panel); z-index: 3; }
-  #drawer .head h2 { font-size: 15.5px; line-height: 1.35; margin-bottom: 7px; padding-right: 28px; }
-  #drawer .head .sub { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  #drawer .head { padding: 14px 16px; border-bottom: 1px solid var(--line3); position: sticky; top: 0; background: rgba(12,19,32,.98); z-index: 3; }
+  #drawer .head h2 { font-size: 13px; line-height: 1.45; margin-bottom: 8px; padding-right: 30px; color: var(--tx0); font-weight: 600; }
+  #drawer .head .sub { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
   #drawer-close {
-    position: absolute; right: 12px; top: 12px; background: var(--panel2); border: 1px solid var(--line);
-    color: var(--tx2); width: 28px; height: 28px; border-radius: 7px; line-height: 1;
+    position: absolute; right: 10px; top: 10px; background: var(--bg3); border: 1px solid var(--line2);
+    color: var(--tx2); width: 24px; height: 24px; border-radius: 4px; font-size: 11px; transition: all .12s;
   }
-  #drawer-close:hover { color: var(--bad); border-color: var(--bad); }
-  #drawer section { padding: 13px 18px; border-bottom: 1px solid var(--line); }
+  #drawer-close:hover { color: var(--bad); border-color: var(--bad); background: var(--bad2); }
+  #drawer section { padding: 12px 16px; border-bottom: 1px solid var(--line); }
   #drawer h3 {
-    font-size: 10px; text-transform: uppercase; letter-spacing: 1.2px;
-    color: var(--dim); margin-bottom: 9px; font-weight: 600;
+    font-size: 8.5px; text-transform: uppercase; letter-spacing: 2px;
+    color: var(--tx2); margin-bottom: 8px; font-weight: 600; display: flex; align-items: center; gap: 8px;
   }
-  .kv { display: grid; grid-template-columns: 105px 1fr; gap: 3px 10px; font-size: 13px; }
-  .kv .k { color: var(--dim); }
+  #drawer h3::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+  .kv { display: grid; grid-template-columns: 95px 1fr; gap: 2px 10px; font-size: 11.5px; }
+  .kv .k { color: var(--tx2); text-transform: uppercase; font-size: 9.5px; letter-spacing: 1px; padding-top: 2px; }
+  .kv .v2 { color: var(--tx1); }
   .pill {
-    display: inline-block; padding: 1px 8px; border-radius: 20px;
-    font-size: 11px; font-weight: 500; margin-right: 4px;
+    display: inline-flex; align-items: center; gap: 4px; padding: 1px 7px; border-radius: 3px;
+    font-size: 9.5px; letter-spacing: .8px; text-transform: uppercase; border: 1px solid transparent;
   }
-  .p-ok  { background: rgba(61,220,151,.13); color: var(--acc); }
-  .p-bad { background: rgba(255,93,108,.13); color: var(--bad); }
-  .p-dim { background: var(--panel2); color: var(--tx2); }
-  .em { font: 12.5px var(--mono); color: var(--cy); cursor: pointer; border-radius: 4px; padding: 0 2px; }
-  .em:hover { background: var(--raise); }
-  .tl { list-style: none; font-size: 12.5px; }
-  .tl li { padding: 5px 0; border-bottom: 1px dashed #182438; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
-  .tl .t { color: var(--dim); font: 11px var(--mono); white-space: nowrap; }
+  .p-ok  { background: var(--acc2); color: var(--acc); border-color: rgba(53,224,161,.3); }
+  .p-bad { background: var(--bad2); color: var(--bad); border-color: rgba(255,84,112,.3); }
+  .p-dim { background: var(--bg3); color: var(--tx2); border-color: var(--line2); }
+  .em { color: var(--cy); cursor: pointer; border-radius: 3px; padding: 0 2px; font-size: 11.5px; transition: all .1s; }
+  .em:hover { background: var(--cy2); text-decoration: none; }
+  .em::before { content: "› "; color: var(--tx3); }
+  .tl { list-style: none; font-size: 11.5px; }
+  .tl li { padding: 5px 0; border-bottom: 1px dashed rgba(140,170,230,.06); display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+  .tl .t { color: var(--tx3); font-size: 10px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .tl .mail { color: var(--tx2); font-size: 10.5px; }
 
-  /* ───────────── console ───────────── */
+  /* ═══════════════ CONSOLE ═══════════════ */
   #console-pane {
-    height: 230px; display: flex; flex-direction: column;
-    border-top: 1px solid var(--line); background: #0a0f18; flex-shrink: 0;
+    height: 216px; display: flex; flex-direction: column;
+    border-top: 1px solid var(--line3); background: #04060b; flex-shrink: 0;
   }
-  #console-bar { display: flex; gap: 8px; padding: 9px 14px; align-items: center; border-bottom: 1px solid var(--line); }
-  #console-bar .tag {
-    color: var(--acc); font: 600 11px var(--mono); background: rgba(61,220,151,.1);
-    border: 1px solid var(--accdim); border-radius: 6px; padding: 4px 10px; white-space: nowrap;
+  #console-bar {
+    display: flex; gap: 10px; padding: 8px 14px; align-items: center;
+    border-bottom: 1px solid var(--line); background: var(--bg1);
   }
+  .prompt-tag {
+    color: var(--acc); font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .prompt-tag::before { content: "❯"; font-size: 12px; }
   #dq-in {
-    flex: 1; background: var(--panel); border: 1px solid var(--line); color: var(--cy);
-    font: 13px var(--mono); padding: 7px 12px; border-radius: 8px; outline: none; transition: border-color .15s;
+    flex: 1; background: transparent; border: none; border-bottom: 1px solid var(--line2);
+    color: var(--cy); font: 12.5px var(--mono); padding: 6px 2px; outline: none; transition: border-color .15s;
   }
-  #dq-in:focus { border-color: var(--acc); }
-  #dq-in::placeholder { color: var(--dim); }
-  #dq-run, .btn {
-    background: var(--panel2); border: 1px solid var(--line); color: var(--tx);
-    padding: 7px 16px; border-radius: 8px; font-weight: 500; transition: all .15s;
+  #dq-in:focus { border-bottom-color: var(--acc); }
+  #dq-in::placeholder { color: var(--tx3); }
+  .btn {
+    background: var(--bg3); border: 1px solid var(--line2); color: var(--tx1);
+    padding: 5px 14px; border-radius: 4px; font-size: 11px; letter-spacing: .5px; transition: all .13s;
   }
-  #dq-run { color: var(--acc); border-color: var(--accdim); }
-  #dq-run:hover { background: var(--raise); }
-  .btn:hover { border-color: var(--line2); color: var(--tx); }
-  #console-out { flex: 1; overflow: auto; padding: 10px 16px; font: 12.5px/1.6 var(--mono); }
+  .btn:hover { border-color: var(--line3); color: var(--tx0); background: var(--bg4); }
+  #dq-run { color: var(--acc); border-color: rgba(53,224,161,.35); background: var(--acc2); }
+  #dq-run:hover { box-shadow: 0 0 10px rgba(53,224,161,.2); border-color: var(--acc); }
+  #console-out { flex: 1; overflow: auto; padding: 8px 16px; font-size: 11.5px; line-height: 1.7; }
   #console-out .err { color: var(--bad); }
-  #console-out .hint { color: var(--dim); }
+  #console-out .hint { color: var(--tx2); }
   #console-out .n { color: var(--acc); font-weight: 700; }
-  #console-out .rrow { color: var(--tx2); }
-  #console-out .rrow::before { content: "▸ "; color: var(--accdim); }
+  #console-out .rrow { color: var(--tx1); }
+  #console-out .rrow::before { content: "│ "; color: var(--tx3); }
 
   #toast {
-    position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
-    background: var(--raise); border: 1px solid var(--line2); color: var(--tx);
-    padding: 9px 18px; border-radius: 10px; display: none; z-index: 99; max-width: 80%;
-    font-size: 13px; box-shadow: 0 8px 30px rgba(0,0,0,.5);
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(8px);
+    background: var(--bg4); border: 1px solid var(--line3); color: var(--tx0);
+    padding: 8px 16px; border-radius: 5px; display: none; z-index: 99; max-width: 80%;
+    font-size: 12px; box-shadow: 0 10px 40px rgba(0,0,0,.6); opacity: 0; transition: all .2s;
   }
-  #toast.err { border-color: var(--bad); }
+  #toast.show { display: block; opacity: 1; transform: translateX(-50%) translateY(0); }
+  #toast.err { border-color: rgba(255,84,112,.5); background: #1c0e16; }
+  #toast.ok { border-color: rgba(53,224,161,.5); }
 
-  kbd {
-    background: var(--panel2); border: 1px solid var(--line2); border-bottom-width: 2px;
-    border-radius: 4px; padding: 0 5px; font: 11px var(--mono); color: var(--tx2);
+  .empty {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 10px; padding: 40px 20px; color: var(--tx3); font-size: 11px; letter-spacing: 1px; text-align: center;
   }
+  .empty::before { content: "◌"; font-size: 28px; opacity: .5; }
 </style>
 </head>
 <body>
 
 <header>
-  <div class="logo"><b>SCRYER</b><span>hartwell-labs / ontologia</span></div>
-  <span id="dot" title="API status"></span>
+  <div class="brand">
+    <svg width="22" height="22" viewBox="0 0 32 32" fill="none">
+      <circle cx="16" cy="16" r="10" stroke="#35e0a1" stroke-width="1.2" opacity=".5"/>
+      <circle cx="16" cy="16" r="6" stroke="#35e0a1" stroke-width="1.2" opacity=".8"/>
+      <circle cx="16" cy="16" r="2" fill="#35e0a1"/>
+      <path d="M16 2v6M16 24v6M2 16h6M24 16h6" stroke="#35e0a1" stroke-width="1.2" opacity=".5"/>
+    </svg>
+    <span class="word">SCR<em>Y</em>ER</span>
+    <span class="ver">v0.7</span>
+  </div>
   <div id="stats"></div>
-  <button id="refresh" title="odśwież (R)">⟳ Odśwież</button>
+  <div class="topright">
+    <span class="clock"><span style="color:var(--tx3)">UTC</span> <b id="clock">--:--:--</b></span>
+    <span class="live"><span id="dot"></span> <span id="live-label">offline</span></span>
+    <button id="refresh">⟳ sync</button>
+  </div>
 </header>
 
 <nav>
-  <button data-tab="graph" class="on">Graf</button>
-  <button data-tab="tenders">Przetargi</button>
-  <button data-tab="surface">Attack Surface</button>
+  <button data-tab="graph" class="on">Graf <span class="badge" id="b-graph">—</span></button>
+  <button data-tab="tenders">Przetargi <span class="badge" id="b-tenders">0</span></button>
+  <button data-tab="surface">Attack Surface <span class="badge" id="b-surface">0</span></button>
 </nav>
 
 <main>
   <div id="list-pane">
+    <div class="pane-label">Rejestr podmiotów <span class="right" id="pane-count"></span></div>
     <div id="filters">
-      <input id="q" placeholder="Szukaj — nazwa, miasto, NIP, e-mail, domena…" autocomplete="off">
-      <select id="f-sektor"><option value="">sektor: all</option></select>
-      <select id="f-kontakt">
-        <option value="">kontakt: all</option>
-        <option value="no">bez kontaktu</option>
+      <input id="q" class="inp" placeholder="nazwa / miasto / NIP / e-mail / domena…" autocomplete="off" spellcheck="false">
+      <select id="f-sektor" class="inp"><option value="">sektor: *</option></select>
+      <select id="f-kontakt" class="inp">
+        <option value="">kontakt: *</option>
+        <option value="no">niekontaktowani</option>
         <option value="yes">skontaktowani</option>
       </select>
-      <select id="f-sort">
+      <select id="f-sort" class="inp">
         <option value="score">score ↓</option>
         <option value="pop">populacja ↓</option>
         <option value="nazwa">nazwa A→Z</option>
@@ -262,12 +370,12 @@
     <div id="rows">
       <table>
         <thead><tr>
-          <th class="c-sc" data-sort="score">SC</th>
+          <th class="c-sc" data-sort="score">Sc</th>
           <th data-sort="nazwa">Podmiot</th>
           <th class="c-pop" data-sort="pop">Pop</th>
           <th class="c-sektor">Sektor</th>
-          <th class="c-miasto" data-sort="">Miasto</th>
-          <th class="c-mail" data-sort="maile">Mail</th>
+          <th class="c-miasto">Miasto</th>
+          <th class="c-mail" data-sort="maile">✉</th>
         </tr></thead>
         <tbody id="tbody"></tbody>
       </table>
@@ -276,20 +384,20 @@
 
   <div id="center">
     <div class="view on" id="view-graph">
-      <div id="graph"><div id="graph-msg">inicjalizacja…</div></div>
+      <div id="graph"><div id="graph-msg">inicjalizacja</div></div>
       <div class="g-ctl">
         <span class="tgl">
-          <label><input type="checkbox" id="g-domeny"> domeny</label>
-          <label><input type="checkbox" id="g-osoby"> osoby</label>
-          <label><input type="checkbox" id="g-only-hot"> tylko HOT</label>
+          <label class="switch"><input type="checkbox" id="g-domeny"><span class="track"></span>domeny</label>
+          <label class="switch"><input type="checkbox" id="g-osoby"><span class="track"></span>osoby</label>
+          <label class="switch"><input type="checkbox" id="g-only-hot"><span class="track"></span>tylko HOT</label>
         </span>
         <span id="legend"></span>
-        <span id="g-count">—</span>
+        <span id="g-count"></span>
       </div>
     </div>
     <div class="view" id="view-tenders">
       <table class="ttable"><thead><tr>
-        <th style="width:52px">SC</th><th>Tytuł</th><th>Organizator</th><th style="width:110px">Deadline</th><th style="width:150px">CPV</th>
+        <th style="width:50px">Sc</th><th>Tytuł</th><th>Organizator</th><th style="width:100px">Deadline</th><th style="width:140px">CPV</th>
       </tr></thead><tbody id="tenders-tb"></tbody></table>
     </div>
     <div class="view" id="view-surface"><div id="surface-out"></div></div>
@@ -297,7 +405,7 @@
 
   <div id="drawer">
     <div class="head">
-      <button id="drawer-close" title="zamknij (Esc)">✕</button>
+      <button id="drawer-close">✕</button>
       <h2 id="d-name">—</h2>
       <div class="sub" id="d-sub"></div>
     </div>
@@ -307,12 +415,12 @@
 
 <div id="console-pane">
   <div id="console-bar">
-    <span class="tag">dQuery</span>
+    <span class="prompt-tag">dquery</span>
     <input id="dq-in" placeholder='podmioty[sektor=wodociagi,pop>100000] !interakcje[email_sent] limit 30' autocomplete="off" spellcheck="false">
-    <button id="dq-run">Run ⏎</button>
-    <button class="btn" id="dq-export" title="zapisz wynik do pliku">⤓ export</button>
+    <button id="dq-run" class="btn">run ⏎</button>
+    <button id="dq-export" class="btn" title="eksport wyników do pliku">⤓ jsonl</button>
   </div>
-  <div id="console-out"><span class="hint">Obiekty: podmioty / przetargi / interakcje · filtry: klucz=wartość, pop>N, nazwa~frag · negacja: !interakcje[email_sent] · <kbd>/</kbd> szukaj · <kbd>R</kbd> odśwież</span></div>
+  <div id="console-out"><span class="hint">obiekt[filtr=wartość] !negacja limit N · obiekty: <b>podmioty</b> / <b>przetargi</b> / <b>interakcje</b> · <kbd>/</kbd> szukaj · <kbd>`</kbd> konsola · <kbd>R</kbd> sync · <kbd>Esc</kbd> zamknij</span></div>
 </div>
 
 <div id="toast"></div>
@@ -324,10 +432,10 @@ const $$ = (s) => [...document.querySelectorAll(s)];
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
 
 const SECTOR_COLORS = {
-  wodociagi: "#4cc3ff", szpital: "#ff5d6c", "admin-publiczna": "#e8b64c",
+  wodociagi: "#55c8ff", szpital: "#ff5470", "admin-publiczna": "#f0b64e",
   education: "#b18ce8", energy: "#ffa657", transport: "#39d2c0",
-  gov: "#3ddc97", water: "#4cc3ff", health: "#ff5d6c", admin: "#e8b64c",
-  other: "#5d7089",
+  gov: "#35e0a1", water: "#55c8ff", health: "#ff5470", admin: "#f0b64e",
+  other: "#66789a",
 };
 const colorOf = (s) => SECTOR_COLORS[s] || SECTOR_COLORS.other;
 
@@ -340,32 +448,42 @@ async function api(path, opts) {
   }
   return r.json();
 }
-function toast(msg, isErr) {
+function toast(msg, kind) {
   const t = $("#toast");
   t.textContent = msg;
-  t.classList.toggle("err", !!isErr);
-  t.style.display = "block";
-  clearTimeout(t._h); t._h = setTimeout(() => t.style.display = "none", 3500);
+  t.className = "show " + (kind || "");
+  clearTimeout(t._h); t._h = setTimeout(() => t.className = "", 3200);
 }
-const fmtN = (n) => n >= 1e6 ? (n/1e6).toFixed(1).replace(".0","") + " mln" : n >= 1e3 ? Math.round(n/1e3) + "k" : String(n ?? 0);
+const fmtN = (n) => n >= 1e6 ? (n/1e6).toFixed(1).replace(".0","") + "M" : n >= 1e3 ? Math.round(n/1e3) + "k" : String(n ?? 0);
+const scoreCls = (v) => v >= 15 ? "s-hot" : v >= 8 ? "s-warm" : v > 0 ? "s-cold" : "s-zero";
+
+/* zegar UTC */
+setInterval(() => {
+  const d = new Date();
+  $("#clock").textContent = [d.getUTCHours(), d.getUTCMinutes(), d.getUTCSeconds()]
+    .map(x => String(x).padStart(2, "0")).join(":");
+}, 1000);
 
 /* ---------------- stats ---------------- */
 async function loadStats() {
   try {
     const s = await api("/api/stats");
     $("#dot").classList.add("ok");
+    $("#live-label").textContent = "live";
     $("#stats").innerHTML = [
       ["podmioty", s.podmioty, ""], ["domeny", s.domeny, ""], ["osoby", s.osoby, ""],
       ["przetargi", s.przetargi, ""], ["interakcje", s.interakcje, ""],
-      ["skontaktowani", s.skontaktowani, "acc"], ["HOT", s.hot, "hot"],
-      ["bez DMARC", s.bez_dmarc, s.bez_dmarc ? "bad" : ""],
+      ["kontakt", s.skontaktowani, "acc"], ["hot", s.hot, s.hot ? "hot" : ""],
+      ["bez dmarc", s.bez_dmarc, s.bez_dmarc ? "bad" : ""],
     ].map(([k, v, cls]) => `<div class="stat ${cls}"><div class="v">${v}</div><div class="k">${k}</div></div>`).join("");
+    $("#b-graph").textContent = s.podmioty;
+    $("#b-tenders").textContent = s.przetargi;
     const sel = $("#f-sektor");
     const cur = sel.value;
-    sel.innerHTML = '<option value="">sektor: all</option>' +
-      s.sektors.filter(x => x.sektor).map(x => `<option value="${esc(x.sektor)}">${esc(x.sektor)} (${x.n})</option>`).join("");
+    sel.innerHTML = '<option value="">sektor: *</option>' +
+      s.sektors.filter(x => x.sektor).map(x => `<option value="${esc(x.sektor)}">${esc(x.sektor)} ${x.n}</option>`).join("");
     sel.value = cur;
-  } catch (e) { $("#dot").classList.remove("ok"); toast("API: " + e.message, true); }
+  } catch (e) { $("#dot").classList.remove("ok"); $("#live-label").textContent = "offline"; toast("API: " + e.message, "err"); }
 }
 
 /* ---------------- lista podmiotów ---------------- */
@@ -376,22 +494,20 @@ async function loadPodmioty() {
   if ($("#f-sektor").value) p.set("sektor", $("#f-sektor").value);
   if ($("#f-kontakt").value) p.set("kontakt", $("#f-kontakt").value);
   p.set("sort", sortKey); p.set("limit", "500");
-  $("#list-meta").textContent = "szukam…";
+  $("#list-meta").textContent = "query…";
   try {
     const d = await api("/api/podmioty?" + p);
-    $("#list-meta").textContent = `wyróżnionych ${d.count} z ${d.total} podmiotów`;
-    $("#tbody").innerHTML = d.items.map(it => {
-      const cls = it.tier_score >= 15 ? "s-hot" : it.tier_score >= 8 ? "s-warm" : "s-cold";
-      return `<tr class="row" data-id="${it.id}">
-        <td><span class="score ${cls}">${it.tier_score}</span></td>
-        <td title="${esc(it.nazwa)}">${esc(it.nazwa)}</td>
-        <td style="font:12px var(--mono);color:var(--tx2)">${it.pop ? fmtN(it.pop) : "—"}</td>
+    $("#list-meta").innerHTML = `pokazano <b>${d.count}</b> / ${d.total}`;
+    $("#pane-count").textContent = `${d.total} rekordów`;
+    $("#tbody").innerHTML = d.items.map(it => `<tr class="row" data-id="${it.id}">
+        <td><span class="score ${scoreCls(it.tier_score)}">${it.tier_score}</span></td>
+        <td class="c-name" title="${esc(it.nazwa)}">${esc(it.nazwa)}</td>
+        <td style="font-variant-numeric:tabular-nums;color:var(--tx2)">${it.pop ? fmtN(it.pop) : "—"}</td>
         <td><span class="sektor-dot" style="background:${colorOf(it.sektor)}"></span>${esc(it.sektor || "—")}</td>
         <td title="${esc(it.miasto)}">${esc(it.miasto || "—")}</td>
-        <td>${it.maile ? `<span class="mailed">✉${it.maile}</span>` : '<span class="nomail">·</span>'}</td>
-      </tr>`;
-    }).join("");
-  } catch (e) { $("#list-meta").textContent = "BŁĄD: " + e.message; }
+        <td>${it.maile ? `<span class="mailed">${it.maile}✉</span>` : '<span class="nomail">·</span>'}</td>
+      </tr>`).join("");
+  } catch (e) { $("#list-meta").textContent = "błąd: " + e.message; }
 }
 
 /* ---------------- drawer ---------------- */
@@ -402,43 +518,43 @@ async function showPodmiot(id) {
     const p = d.podmiot;
     $("#d-name").textContent = p.nazwa;
     $("#d-sub").innerHTML =
-      `<span class="score ${p.tier_score>=15?"s-hot":p.tier_score>=8?"s-warm":"s-cold"}">${p.tier_score}</span>` +
+      `<span class="score ${scoreCls(p.tier_score)}">${p.tier_score}</span>` +
       `<span class="pill p-dim"><span class="sektor-dot" style="background:${colorOf(p.sektor)}"></span>${esc(p.sektor||"—")}</span>` +
-      `<span class="pill p-dim">KSC: ${esc(p.ksc_status)}</span>`;
+      `<span class="pill p-dim">KSC ${esc(p.ksc_status)}</span>`;
     const ts = (u) => u ? new Date(u*1000).toLocaleString("pl-PL", {dateStyle:"short", timeStyle:"short"}) : "—";
     $("#d-body").innerHTML = `
-      <section><h3>Profil</h3><div class="kv">
-        <span class="k">NIP</span><span style="font:12.5px var(--mono)">${esc(p.nip)||"—"}</span>
-        <span class="k">miasto</span><span>${esc(p.miasto)||"—"}</span>
-        <span class="k">województwo</span><span>${esc(p.wojewodztwo)||"—"}</span>
-        <span class="k">populacja</span><span>${p.pop?fmtN(p.pop):"—"}</span>
-        <span class="k">źródła</span><span>${esc(p.zrodla)||"—"}</span>
+      <section><h3>profil</h3><div class="kv">
+        <span class="k">nip</span><span class="v2">${esc(p.nip)||"—"}</span>
+        <span class="k">miasto</span><span class="v2">${esc(p.miasto)||"—"}</span>
+        <span class="k">województwo</span><span class="v2">${esc(p.wojewodztwo)||"—"}</span>
+        <span class="k">populacja</span><span class="v2">${p.pop?fmtN(p.pop):"—"}</span>
+        <span class="k">źródła</span><span class="v2">${esc(p.zrodla)||"—"}</span>
       </div></section>
-      <section><h3>Domeny / poczta</h3>${
-        d.domeny.length ? d.domeny.map(x => `<div style="margin-bottom:6px">
-          <div style="font:13px var(--mono)">${esc(x.nazwa)}</div>
-          ${x.mx?'<span class="pill p-ok">MX</span>':'<span class="pill p-dim">no-MX</span>'}
-          ${x.dmarc?'<span class="pill p-ok">DMARC</span>':'<span class="pill p-bad">bez DMARC</span>'}
-          ${x.spf?'':'<span class="pill p-bad">bez SPF</span>'}
+      <section><h3>domeny / poczta</h3>${
+        d.domeny.length ? d.domeny.map(x => `<div style="margin-bottom:7px">
+          <div style="color:var(--tx0);margin-bottom:2px">${esc(x.nazwa)}</div>
+          ${x.mx?'<span class="pill p-ok">mx</span>':'<span class="pill p-dim">no-mx</span>'}
+          ${x.dmarc?'<span class="pill p-ok">dmarc</span>':'<span class="pill p-bad">bez dmarc</span>'}
+          ${x.spf?'':'<span class="pill p-bad">bez spf</span>'}
         </div>`).join("") : '<span class="hint">brak domen</span>'
       }</section>
-      <section><h3>Osoby (${d.osoby.length})</h3>${
-        d.osoby.map(o => `<div style="margin-bottom:4px"><span class="em" data-copy="${esc(o.email)}" title="klik = kopiuj">${esc(o.email)}</span>
+      <section><h3>osoby · ${d.osoby.length}</h3>${
+        d.osoby.map(o => `<div style="margin-bottom:3px"><span class="em" data-copy="${esc(o.email)}" title="klik = kopiuj">${esc(o.email)}</span>
           ${o.rola?`<span class="pill p-dim">${esc(o.rola)}</span>`:""}</div>`).join("") || "—"
       }</section>
-      <section><h3>Interakcje (${d.interakcje.length})</h3><ul class="tl">${
+      <section><h3>interakcje · ${d.interakcje.length}</h3><ul class="tl">${
         d.interakcje.map(i => `<li><span class="t">${ts(i.ts)}</span>
           <span class="pill ${i.typ==="email_sent"?"p-ok":"p-dim"}">${esc(i.typ)}</span>
-          <span style="font:12px var(--mono);color:var(--tx2)">${esc(i.email)}</span>
-          <span>${esc(i.temat)}</span></li>`).join("") || "<li>—</li>"
+          <span class="mail">${esc(i.email)}</span>
+          <span style="color:var(--tx1)">${esc(i.temat)}</span></li>`).join("") || "<li>—</li>"
       }</ul></section>`;
     $("#drawer").classList.add("on");
-  } catch (e) { toast(e.message, true); }
+  } catch (e) { toast(e.message, "err"); }
 }
 $("#drawer-close").onclick = () => { $("#drawer").classList.remove("on"); $$("#tbody tr").forEach(tr => tr.classList.remove("open")); };
 document.addEventListener("click", (ev) => {
   const em = ev.target.closest("[data-copy]");
-  if (em) { navigator.clipboard?.writeText(em.dataset.copy); toast("skopiowano: " + em.dataset.copy); }
+  if (em) { navigator.clipboard?.writeText(em.dataset.copy); toast("skopiowano " + em.dataset.copy, "ok"); }
 });
 
 /* ---------------- graf ---------------- */
@@ -457,14 +573,14 @@ function loadVis() {
   return visLoading;
 }
 async function buildGraph() {
-  $("#graph-msg").textContent = "wczytywanie danych…";
+  $("#graph-msg").textContent = "wczytywanie danych";
   try {
     if (!GRAPH) GRAPH = await api("/api/graph");
     await loadVis();
     graphBuilt = true;
     renderGraph();
   } catch (e) {
-    $("#graph-msg").textContent = "graf: " + e.message + " — lista i konsola działają dalej.";
+    $("#graph-msg").textContent = "graf: " + e.message;
   }
 }
 function renderGraph() {
@@ -484,40 +600,39 @@ function renderGraph() {
       label: p.nazwa.length > 36 ? p.nazwa.slice(0, 35) + "…" : p.nazwa,
       title: `${p.nazwa}\nscore: ${p.score}\nmiasto: ${p.miasto || "—"}\n(klik = profil)`,
       shape: "box",
-      shapeProperties: { borderRadius: 6 },
+      shapeProperties: { borderRadius: 4 },
       margin: 7,
-      borderWidth: hot ? 2 : 1,
+      borderWidth: hot ? 1.5 : 1,
       color: {
-        background: hot ? "#2b1a16" : "#14202f",
-        border: hot ? "#ff7a59" : "#26374f",
-        highlight: { background: "#1d2f47", border: colorOf(p.sektor) },
+        background: hot ? "#241410" : "#0e1726",
+        border: hot ? "#ff7d5c" : "#22334e",
+        highlight: { background: "#15243c", border: colorOf(p.sektor) },
+        hover: { background: "#15243c", border: colorOf(p.sektor) },
       },
-      font: { face: "monospace", size: 11, color: hot ? "#ffb39e" : "#c7d3e2" },
-      _podmiot: p.id,
+      font: { face: "JetBrains Mono, monospace", size: 10.5, color: hot ? "#ffb8a3" : "#9fb0ca" },
     });
   }
   if (showD) for (const d of GRAPH.domeny) {
     n.push({
       id: "d" + d.id, label: d.nazwa, shape: "dot",
-      size: 5, color: { background: d.mx ? "#4cc3ff" : "#33415a", border: "transparent" },
-      font: { size: 9, color: "#5d7089", face: "monospace" },
+      size: 4.5, color: { background: d.mx ? "#55c8ff" : "#2c3c58", border: "transparent" },
+      font: { size: 9, color: "#5d7089", face: "JetBrains Mono, monospace" },
       title: `${d.nazwa}\nMX: ${d.mx ? "tak" : "nie"}\nDMARC: ${d.dmarc || "BRAK"}`,
     });
-    e.push({ from: "p" + d.podmiot_id, to: "d" + d.id, color: { color: "#1b2940" } });
+    e.push({ from: "p" + d.podmiot_id, to: "d" + d.id, color: { color: "rgba(90,120,180,.14)" } });
   }
   if (showO) for (const o of GRAPH.osoby) {
     const got = emailed.has(o.email);
     n.push({
-      id: "o" + o.id, label: got ? "✉ " + o.email : o.email, shape: "dot", size: 4,
-      color: { background: got ? "#3ddc97" : "#2a3a52", border: "transparent" },
-      font: { size: 9, color: got ? "#3ddc97" : "#42536d", face: "monospace" }, title: o.email,
+      id: "o" + o.id, label: got ? "✉ " + o.email : o.email, shape: "dot", size: 3.5,
+      color: { background: got ? "#35e0a1" : "#28374f", border: "transparent" },
+      font: { size: 9, color: got ? "#35e0a1" : "#42536d", face: "JetBrains Mono, monospace" }, title: o.email,
     });
-    e.push({ from: "p" + o.podmiot_id, to: "o" + o.id, color: { color: "#16222f" } });
+    e.push({ from: "p" + o.podmiot_id, to: "o" + o.id, color: { color: "rgba(90,120,180,.1)" } });
   }
   nodes = new vis.DataSet(n); edges = new vis.DataSet(e);
   const container = $("#graph");
-  container.innerHTML = "";
-  $("#graph").insertAdjacentHTML("beforeend", '<div id="graph-msg"></div>');
+  container.innerHTML = '<div id="graph-msg">stabilizacja</div><div class="scanline"></div>';
   const network = new vis.Network(container, { nodes, edges }, {
     autoResize: true,
     physics: {
@@ -525,15 +640,18 @@ function renderGraph() {
       barnesHut: { gravitationalConstant: -3200, springConstant: 0.045, springLength: 110, damping: 0.45, avoidOverlap: 0.1 },
       stabilization: { enabled: true, iterations: 220, fit: true },
     },
-    interaction: { hover: true, tooltipDelay: 140, hideEdgesOnDrag: true, navigationButtons: false },
-    nodes: { shape: "box", font: { face: "monospace" } },
-    edges: { color: { color: "#1e2d45" }, smooth: false, selectionWidth: 2 },
+    interaction: { hover: true, tooltipDelay: 140, hideEdgesOnDrag: true },
+    nodes: { shape: "box", font: { face: "JetBrains Mono, monospace" } },
+    edges: { color: { color: "#1c2a44" }, smooth: false, selectionWidth: 1.5 },
   });
   network.on("stabilizationProgress", (p) => {
-    const pct = Math.round((p.iterations / p.total) * 100);
-    $("#graph-msg").textContent = `stabilizacja grafu… ${pct}%`;
+    $("#graph-msg").textContent = `stabilizacja ${Math.round((p.iterations / p.total) * 100)}%`;
   });
-  network.on("stabilizationIterationsDone", () => { $("#graph-msg").remove(); network.fit(); });
+  network.on("stabilizationIterationsDone", () => {
+    $("#graph-msg").remove();
+    container.querySelector(".scanline")?.remove();
+    network.fit();
+  });
   network.on("click", (params) => {
     const id = params.nodes[0];
     if (id && String(id).startsWith("p")) showPodmiot(Number(String(id).slice(1)));
@@ -546,34 +664,37 @@ function renderGraph() {
 async function loadTenders() {
   try {
     const d = await api("/api/tenders");
+    $("#b-tenders").textContent = d.count;
     $("#tenders-tb").innerHTML = d.items.map(t => `<tr>
-      <td><span class="score ${t.match_score>=15?"s-hot":t.match_score>=8?"s-warm":"s-cold"}">${t.match_score}</span></td>
+      <td><span class="score ${scoreCls(t.match_score)}">${t.match_score}</span></td>
       <td title="${esc(t.tytul)}"><a href="${esc(t.url)}" target="_blank" rel="noopener">${esc(t.tytul)}</a></td>
-      <td>${esc(t.org)}</td><td style="font:12px var(--mono)">${esc(t.deadline)}</td><td style="font:12px var(--mono);color:var(--tx2)">${esc(t.cpv)}</td></tr>`).join("")
-      || '<tr><td colspan="5"><div class="hintbox">Brak przetargów w grafie. Import przez <code>scryer-core tenders &lt;bzp.json&gt;</code> (BZP/TED — v0.6 czeka na klucz API).</div></td></tr>';
-  } catch (e) { toast(e.message, true); }
+      <td>${esc(t.org)}</td><td style="font-variant-numeric:tabular-nums">${esc(t.deadline)}</td><td style="color:var(--tx2)">${esc(t.cpv)}</td></tr>`).join("")
+      || '<tr><td colspan="5"><div class="empty">brak przetargów w grafie — import: scryer-core tenders &lt;bzp.json&gt;</div></td></tr>';
+  } catch (e) { toast(e.message, "err"); }
 }
 async function loadSurface() {
   try {
     const d = await api("/api/attack-surface");
+    $("#b-surface").textContent = d.count;
     $("#surface-out").innerHTML = d.items.length
-      ? `<div class="hintbox">HOT-podmioty (score ≥ 15) z domeną bez DMARC — amunicja na pierwszy mail: <i>„ma pan/pani pocztę otwartą na spoofing”</i>.</div>` +
+      ? `<div class="callout">HOT-podmioty (score ≥ 15) z domeną bez DMARC — amunicja na pierwszy mail: <i>„pocztą państwa można podszywać się bez przeszkód”</i>. Klik w podmiot na liście otworzy pełny profil.</div>` +
         d.items.map(x => `<div class="surface-row"><b>${esc(x.nazwa)}</b><span class="dom">${esc(x.domena)}</span></div>`).join("")
-      : '<div class="hintbox">Brak sygnałów — HOT-y z dziurawym DMARC-em się skończyły. Uruchom scoring, żeby podbić tier_score dla bazy.</div>';
-  } catch (e) { toast(e.message, true); }
+      : '<div class="callout dim">brak sygnałów — HOT-y z dziurawym DMARC-em się skończyły. Uruchom scoring, żeby podbić tier_score bazy.</div>';
+  } catch (e) { toast(e.message, "err"); }
 }
 
 /* ---------------- dQuery ---------------- */
 async function runQuery(q) {
   const out = $("#console-out");
+  out.innerHTML = `<span class="hint">query…</span>`;
   try {
     const d = await api("/api/query", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ q }),
     });
-    out.innerHTML = `<div><span class="n">${d.count}</span> wyników:</div>` +
+    out.innerHTML = `<div><span class="n">${d.count}</span> <span class="hint">wyników</span></div>` +
       d.rows.map(r => `<div class="rrow">${esc(r)}</div>`).join("");
-  } catch (e) { out.innerHTML = `<div class="err">błąd: ${esc(e.message)}</div>`; }
+  } catch (e) { out.innerHTML = `<div class="err">✗ ${esc(e.message)}</div>`; }
 }
 
 /* ---------------- events ---------------- */
@@ -599,10 +720,11 @@ $("#dq-run").onclick = () => { const q = $("#dq-in").value.trim(); if (q) runQue
 $("#dq-in").addEventListener("keydown", (ev) => { if (ev.key === "Enter") $("#dq-run").click(); });
 $("#dq-export").onclick = () => {
   const rows = [...$("#console-out").querySelectorAll(".rrow")].map(d => d.textContent);
-  if (!rows.length) return toast("nic do eksportu — najpierp odpal zapytanie", true);
+  if (!rows.length) return toast("nic do eksportu — najpierw uruchom zapytanie", "err");
   const blob = new Blob([rows.join("\n")], { type: "application/jsonl" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob); a.download = "scryer-query.jsonl"; a.click();
+  toast("eksport scryer-query.jsonl", "ok");
 };
 $("#refresh").onclick = () => { loadStats(); loadPodmioty(); if (graphBuilt) buildGraph(); };
 document.addEventListener("keydown", (ev) => {
@@ -616,7 +738,7 @@ document.addEventListener("keydown", (ev) => {
 /* ---------------- boot ---------------- */
 loadStats();
 loadPodmioty();
-buildGraph(); // GRAF to domyślna zakładka — startuj od razu
+buildGraph(); // GRAF = zakładka domyślna — startuj od razu
 setInterval(loadStats, 30000);
 </script>
 </body>
