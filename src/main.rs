@@ -7,7 +7,7 @@
 //!   demo                               — generuje seed demo i odpala score (dla leniwych)
 
 use scryer_core::model::Lead;
-use scryer_core::{export, score, send, store};
+use scryer_core::{bzp, export, score, send, store};
 use std::path::Path;
 
 fn main() {
@@ -16,6 +16,7 @@ fn main() {
         Some("score") if args.len() >= 3 => cmd_score(&args[2]),
         Some("briefs") if args.len() >= 4 => cmd_briefs(&args[2], &args[3]),
         Some("send") if args.len() >= 3 => cmd_send(&args[2]),
+        Some("tenders") if args.len() >= 3 => cmd_tenders(&args[2]),
         Some("report") => println!("{}", send::report("outbox.jsonl")),
         Some("demo") => cmd_demo(),
         _ => {
@@ -25,6 +26,7 @@ fn main() {
             eprintln!("  scryer-core send <leads.json>                (DRY-RUN domyślnie; SCRYER_CONFIRM=yes = wyślij;");
             eprintln!("                  SCRYER_RESEND_KEY=klucz, SCRYER_FROM=adres, SCRYER_DAILY_LIMIT=20, SCRYER_OUTBOX=outbox.jsonl)");
             eprintln!("  scryer-core report                            (statystyki kampanii z outbox.jsonl)");
+            eprintln!("  scryer-core tenders <bzp.json>                (scoring przetargow BZP pod Talus; SCRYER_OUT=csv)");
             eprintln!("  scryer-core demo");
             std::process::exit(2);
         }
@@ -85,6 +87,44 @@ fn cmd_briefs(path: &str, outdir: &str) {
 fn cmd_demo() {
     println!("seed demo: seed/leads-demo.json → score");
     cmd_score("seed/leads-demo.json");
+}
+
+fn cmd_tenders(path: &str) {
+    let raw = std::fs::read_to_string(path).unwrap_or_else(|e| panic!("nie mogę czytać {path}: {e}"));
+    let mut tenders = bzp::load(&raw).unwrap_or_else(|e| panic!("JSON: {e}"));
+    let mut rows: Vec<(u32, &bzp::Tender, Vec<String>)> = tenders
+        .iter()
+        .map(|t| {
+            let m = bzp::score(t);
+            (m.score, t, m.reasons)
+        })
+        .collect();
+    rows.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.title.cmp(&b.1.title)));
+    println!("scryer: {} ogłoszeń → dopasowanie pod Talus", rows.len());
+    let out = std::env::var("SCRYER_OUT").unwrap_or_else(|_| "tenders-ranked.csv".into());
+    let mut csv = String::from("SCORE;TIER;TITLE;ORG;DEADLINE;URL;REASONS\n");
+    let mut shown = 0;
+    for (sc, t, reasons) in &rows {
+        let tier = bzp::tier(&bzp::Match { score: *sc, reasons: Vec::new() });
+        if *sc >= 8 {
+            println!("  [{:>2} {}] {} — {}", sc, tier, t.org, t.title);
+            println!("        deadline: {} | {}", t.deadline, t.url);
+            shown += 1;
+        }
+        let esc = |s: &str| s.replace(';', ",").replace('\n', " ");
+        csv.push_str(&format!(
+            "{};{};{};{};{};{};{}\n",
+            sc,
+            tier,
+            esc(&t.title),
+            esc(&t.org),
+            esc(&t.deadline),
+            esc(&t.url),
+            esc(&reasons.join(" | ")),
+        ));
+    }
+    std::fs::write(&out, csv).expect("zapis CSV");
+    println!("pasujących (>=8): {shown} | CSV → {out}");
 }
 
 fn cmd_send(path: &str) {

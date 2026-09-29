@@ -7,6 +7,7 @@
 //!   * zero network deps — własny minimalny klient DNS (dnsmini),
 //!   * deterministyczny output + manifest sha256 (audit-ready, LOG PR7).
 
+pub mod bzp;
 pub mod dnsmini;
 pub mod enrich;
 pub mod export;
