@@ -2,7 +2,7 @@
 name = "scryer-core"
 version = "0.1.0"
 edition = "2021"
-license = "MIT"
+license = "LicenseRef-Proprietary"
 description = "Hartwell Labs — lead intelligence engine (BZP/BIP ingestion, KSC/NIS2 scoring, campaign export)"
 authors = ["Hartwell Labs"]
 

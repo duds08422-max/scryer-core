@@ -16,7 +16,10 @@ briefami mailowymi.
 3. **Own your stack** — własny minimalny klient DNS (`dnsmini`), zero
    zależności sieciowych; rdzeń deterministyczny, output podpisywany
    manifestem sha256 (audit-ready).
-4. **MIT**, issues welcome.
+4. **Licencja własnościowa (proprietary)** — Scryer to narzędzie klasy
+   intelligence; odbiorcy: podmioty publiczne (CSIRT/IK), operatorzy
+   infrastruktury krytycznej i enterprise. Rdzeń nie jest open source.
+   Kontakt: contact@hartwell-labs.pl
 
 ## Pipeline
 
