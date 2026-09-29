@@ -96,13 +96,32 @@ wyszło w pasywnym audycie domeny.\n"
             )
         })
         .unwrap_or_default();
+    // v0.3: pitch zależny od sektora — wod-kan: SCADA/dyspozytornia, urzędy: dane
+    // mieszkańców, energetyka: OT; reszta (health) — wersja ogólna.
+    let pitch = match lead.sector {
+        crate::model::Sector::Water => "Talus CI to agent dla Linuksa, który wykrywa ransomware i \
+eksfiltrację na poziomie jądra (eBPF) i automatycznie zatrzymuje proces ataku — bez chmury, \
+bez telemetrii, bez modułów jądra. Licencja i aktualizacje w pełni offline. Montowany na \
+stacjach operatorowych, serwerach dyspozytorskich SCADA i stacjach roboczych inżynierów — \
+tam, gdzie segment OT nie może widzieć internetu.\n\n".to_string(),
+        crate::model::Sector::Energy => "Talus CI to agent dla Linuksa, który wykrywa ransomware \
+i eksfiltrację na poziomie jądra (eBPF) i automatycznie zatrzymuje proces ataku — bez chmury, \
+bez telemetrii. Licencja i aktualizacje w pełni offline. Celuje w stacje operatorowe i serwery \
+dyspozytorskie w segmentach OT, gdzie dostęp z internetu jest wykluczony.\n\n".to_string(),
+        crate::model::Sector::PublicAdmin => "Talus CI to agent dla Linuksa, który wykrywa \
+ransomware i eksfiltrację na poziomie jądra (eBPF) i automatycznie zatrzymuje proces ataku — \
+bez chmury, bez telemetrii. Licencja i aktualizacje w pełni offline. Chroni serwery \
+aplikacyjne i stacje robocze z danymi mieszkańców, tam gdzie chmura nie wchodzi w grę.\n\n".to_string(),
+        _ => "Talus CI to agent bezpieczeństwa dla Linuksa, który wykrywa ransomware i \
+eksfiltrację na poziomie jądra (eBPF) i automatycznie zatrzymuje proces ataku — bez chmury, \
+bez telemetrii, bez modułów jądra. Licencja i aktualizacje działają w pełni offline.\n\n".to_string(),
+    };
     let body = format!(
         "Dzień dobry,\n\npiszę krótko, bo przed 3 października {short} składa wniosek o wpis do \
 Wykazu podmiotów kluczowych (KSC) — a po wpisie przyjdzie realny obowiązek wykrywania i \
 reagowania na incydenty (art. 25 ustawy KSC), także na systemach odciętych od internetu.\n\n\
-Talus CI to agent bezpieczeństwa dla Linuksa, który wykrywa ransomware i eksfiltrację na \
-poziomie jądra (eBPF) i automatycznie zatrzymuje proces ataku — bez chmury, bez telemetrii, \
-bez modułów jądra. Licencja i aktualizacje działają w pełni offline.\n{ammo_line}\n\
+{pitch}\
+{ammo_line}\
 Proponuję 14-dniowy pilotaż (1–5 hostów, 0 zł, bez zobowiązań). Standardowa cena roczna to \
 100 000 zł netto — kwota mieści się w trybie zamówienia z wolnej ręki.\n\n\
 Czy przesłać krótki brief (3 strony PDF) i ustawić pilotaż?\n\n--\n\
