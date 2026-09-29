@@ -4,7 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SCRYER — ontologia</title>
-<script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+<!-- vis-network vendored lokalnie (/assets/vis-network.min.js) — zero CDN,
+     strona działa w pełni offline / za air-gaped -->
 <style>
   :root {
     --bg: #0a0e14; --panel: #10161f; --panel2: #151d29; --line: #1f2a3a;
@@ -185,9 +186,10 @@
         <div id="graph-msg">graf ontologii — wczytywanie…</div>
       </div>
       <div class="g-ctl">
-        <label><input type="checkbox" id="g-domeny" checked> domeny</label>
-        <label><input type="checkbox" id="g-osoby" checked> osoby</label>
+        <label><input type="checkbox" id="g-domeny"> domeny</label>
+        <label><input type="checkbox" id="g-osoby"> osoby</label>
         <label><input type="checkbox" id="g-only-hot"> tylko HOT (score≥15)</label>
+        <span id="legend" style="display:flex;gap:8px;margin-left:12px"></span>
         <label style="margin-left:auto" id="g-count">—</label>
       </div>
     </div>
@@ -336,22 +338,40 @@ document.addEventListener("click", (ev) => {
 
 /* ---------------- graf ---------------- */
 let graphBuilt = false, GRAPH = null, nodes, edges;
+let visLoading = null;
+function loadVis() {
+  if (typeof vis !== "undefined") return Promise.resolve();
+  if (visLoading) return visLoading;
+  visLoading = new Promise((ok, bad) => {
+    const s = document.createElement("script");
+    s.src = "/assets/vis-network.min.js";
+    s.onload = ok;
+    s.onerror = () => bad(new Error("nie mogę załadować vis-network z /assets"));
+    document.head.appendChild(s);
+  });
+  return visLoading;
+}
 async function buildGraph() {
-  if (typeof vis === "undefined") {
-    $("#graph-msg").textContent = "brak vis-network (CDN offline) — lista i konsola działają dalej.";
-    return;
-  }
-  $("#graph-msg").textContent = "wczytywanie grafu…";
+  $("#graph-msg").textContent = "wczytywanie danych…";
   try {
-    GRAPH = await api("/api/graph");
+    if (!GRAPH) GRAPH = await api("/api/graph");
+    await loadVis();
     graphBuilt = true;
     renderGraph();
-  } catch (e) { $("#graph-msg").textContent = "błąd grafu: " + e.message; }
+  } catch (e) {
+    $("#graph-msg").textContent = "graf: " + e.message + " — lista i konsola działają dalej.";
+  }
 }
 function renderGraph() {
   const showD = $("#g-domeny").checked, showO = $("#g-osoby").checked, onlyHot = $("#g-only-hot").checked;
   const emailed = new Set(GRAPH.emailed || []);
   const n = [], e = [];
+  // legenda sektorów (raz)
+  if (!$("#legend").childElementCount) {
+    $("#legend").innerHTML = Object.entries(SECTOR_COLORS)
+      .filter(([k]) => k !== "other")
+      .map(([k, c]) => `<span style="color:${c}">■${k}</span>`).join("");
+  }
   for (const p of GRAPH.podmioty) {
     if (onlyHot && p.score < 15) continue;
     n.push({ id: "p" + p.id, label: p.nazwa.length > 34 ? p.nazwa.slice(0, 33) + "…" : p.nazwa,
@@ -375,18 +395,35 @@ function renderGraph() {
   nodes = new vis.DataSet(n); edges = new vis.DataSet(e);
   const container = $("#graph");
   container.innerHTML = "";
+  // cięższy graf = krótsza stabilizacja, bez wygładzania krawędzi (perf)
+  const heavy = n.length > 400;
   const network = new vis.Network(container, { nodes, edges }, {
-    physics: { solver: "barnesHut", barnesHut: { gravitationalConstant: -6000, springLength: 90 }, stabilization: { iterations: 250 } },
-    interaction: { hover: true, tooltipDelay: 120 },
+    physics: {
+      solver: "barnesHut",
+      barnesHut: { gravitationalConstant: heavy ? -9000 : -6000, springLength: 90 },
+      stabilization: {
+        enabled: true,
+        iterations: heavy ? 120 : 250,
+        fit: true,
+      },
+    },
+    interaction: { hover: true, tooltipDelay: 120, hideEdgesOnDrag: true },
     nodes: { shape: "box", margin: 5, borderWidth: 1, font: { face: "monospace" } },
-    edges: { color: { color: "#1f2a3a" } },
+    edges: { color: { color: "#1f2a3a" }, smooth: false },
   });
+  network.on("stabilizationProgress", (p) => {
+    const pct = Math.round((p.iterations / p.total) * 100);
+    $("#graph-msg").textContent = `stabilizacja grafu… ${pct}%`;
+  });
+  network.on("stabilizationIterationsDone", () => {
+    $("#graph-msg").textContent = "";
+  });
+  network.once("stabilizationIterationsDone", () => network.fit());
   network.on("click", (params) => {
     const id = params.nodes[0];
     if (id && String(id).startsWith("p")) showPodmiot(Number(String(id).slice(1)));
   });
   $("#g-count").textContent = `${n.length} węzłów / ${e.length} krawędzi`;
-  $("#graph-msg").textContent = "";
 }
 ["#g-domeny", "#g-osoby", "#g-only-hot"].forEach(sel => $(sel).onchange = () => graphBuilt && renderGraph());
 
@@ -466,6 +503,7 @@ document.addEventListener("keydown", (ev) => {
 /* ---------------- boot ---------------- */
 loadStats();
 loadPodmioty();
+buildGraph(); // GRAF to domyślna zakładka — bez tego wisiał „wczytywanie…” na zawsze
 setInterval(loadStats, 30000);
 </script>
 </body>

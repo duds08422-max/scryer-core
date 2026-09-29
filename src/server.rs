@@ -57,6 +57,7 @@ pub async fn serve(db: PathBuf, host: &str, port: u16) -> Result<(), String> {
 
     let app = Router::new()
         .route("/", get(index))
+        .route("/assets/vis-network.min.js", get(asset_vis_js))
         .route("/api/stats", get(api_stats))
         .route("/api/podmioty", get(api_podmioty))
         .route("/api/podmiot/:id", get(api_podmiot))
@@ -77,6 +78,14 @@ pub async fn serve(db: PathBuf, host: &str, port: u16) -> Result<(), String> {
 
 async fn index() -> Html<&'static str> {
     Html(CONSOLE_HTML)
+}
+
+/// vis-network vendored w binarce — konsola działa bez internetu (air-gap OK).
+async fn asset_vis_js() -> impl IntoResponse {
+    (
+        [(axum::http::header::CONTENT_TYPE, "application/javascript")],
+        ASSET_VIS_JS,
+    )
 }
 
 // ---------------------------------------------------------------- stats ---
@@ -455,3 +464,4 @@ async fn api_attack_surface(State(s): State<S>) -> ApiResult {
 // -------------------------------------------------------------- konsola ---
 
 const CONSOLE_HTML: &str = include_str!("console.html");
+const ASSET_VIS_JS: &str = include_str!("assets/vis-network.min.js");
