@@ -4,157 +4,247 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SCRYER — ontologia</title>
-<!-- vis-network vendored lokalnie (/assets/vis-network.min.js) — zero CDN,
-     strona działa w pełni offline / za air-gaped -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230d1420'/%3E%3Ccircle cx='16' cy='16' r='7' fill='none' stroke='%233ddc97' stroke-width='2.5'/%3E%3Ccircle cx='16' cy='16' r='2.5' fill='%233ddc97'/%3E%3C/svg%3E">
+<!-- vis-network vendored lokalnie (/assets/vis-network.min.js) — zero CDN, działa offline -->
 <style>
   :root {
-    --bg: #0a0e14; --panel: #10161f; --panel2: #151d29; --line: #1f2a3a;
-    --tx: #c9d4e3; --dim: #6b7a90; --acc: #4cc38a; --cy: #58c4dd;
-    --warn: #e3b341; --bad: #f85149; --hot: #ff7b54;
+    --bg: #0b111b; --bg2: #0e1622; --panel: #101a29; --panel2: #16233a; --raise: #1b2b45;
+    --line: #1e2d45; --line2: #2a3d5c;
+    --tx: #dbe4f0; --tx2: #8fa1ba; --dim: #5d7089;
+    --acc: #3ddc97; --accdim: #1d5c40;
+    --cy: #4cc3ff; --warn: #e8b64c; --hot: #ff7a59; --bad: #ff5d6c;
+    --mono: ui-monospace, "JetBrains Mono", "Cascadia Code", "SF Mono", Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
   body {
     background: var(--bg); color: var(--tx);
-    font: 13px/1.45 "SF Mono", "Cascadia Code", Consolas, monospace;
-    height: 100vh; display: flex; flex-direction: column; overflow: hidden;
+    font: 13.5px/1.5 var(--sans);
+    display: flex; flex-direction: column; overflow: hidden;
   }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: var(--line2); border-radius: 5px; border: 2px solid var(--bg); }
+  ::-webkit-scrollbar-track { background: transparent; }
   a { color: var(--cy); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  button { font: inherit; cursor: pointer; }
 
-  /* ---------- top bar ---------- */
+  /* ───────────── header ───────────── */
   header {
-    display: flex; align-items: center; gap: 14px; padding: 8px 14px;
-    background: var(--panel); border-bottom: 1px solid var(--line); flex-shrink: 0;
+    display: flex; align-items: center; gap: 16px; padding: 10px 18px;
+    background: linear-gradient(180deg, var(--panel), var(--bg2));
+    border-bottom: 1px solid var(--line); flex-shrink: 0;
   }
-  .logo { font-weight: 700; letter-spacing: 3px; color: var(--acc); font-size: 15px; }
-  .logo small { color: var(--dim); letter-spacing: 0; font-weight: 400; }
-  #dot { width: 8px; height: 8px; border-radius: 50%; background: var(--bad); display: inline-block; }
-  #dot.ok { background: var(--acc); box-shadow: 0 0 6px var(--acc); }
-  .chips { display: flex; gap: 8px; flex-wrap: wrap; }
-  .chip {
-    background: var(--panel2); border: 1px solid var(--line); border-radius: 3px;
-    padding: 2px 8px; font-size: 11px; color: var(--dim); cursor: pointer;
-  }
-  .chip b { color: var(--tx); font-size: 12px; }
-  .chip.hot b { color: var(--hot); }
-  .chip.bad b { color: var(--bad); }
-  .chip.acc b { color: var(--acc); }
-  .chip:hover { border-color: var(--cy); }
-  #refresh { margin-left: auto; background: none; border: 1px solid var(--line); color: var(--dim);
-    padding: 3px 10px; cursor: pointer; font: inherit; border-radius: 3px; }
-  #refresh:hover { color: var(--tx); border-color: var(--cy); }
+  .logo { display: flex; align-items: baseline; gap: 9px; white-space: nowrap; }
+  .logo b { font: 700 16px/1 var(--mono); letter-spacing: 4px; color: var(--acc); }
+  .logo span { color: var(--dim); font-size: 11.5px; }
+  #dot { width: 9px; height: 9px; border-radius: 50%; background: var(--bad); flex-shrink: 0; transition: all .3s; }
+  #dot.ok { background: var(--acc); box-shadow: 0 0 8px var(--acc); }
 
-  /* ---------- tabs ---------- */
-  nav { display: flex; gap: 2px; padding: 6px 14px 0; background: var(--panel); border-bottom: 1px solid var(--line); flex-shrink: 0; }
-  nav button {
-    background: none; border: none; color: var(--dim); font: inherit; padding: 6px 14px;
-    cursor: pointer; border-bottom: 2px solid transparent;
+  /* stat tiles */
+  #stats { display: flex; gap: 6px; flex: 1; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+  #stats::-webkit-scrollbar { display: none; }
+  .stat {
+    background: var(--panel2); border: 1px solid var(--line); border-radius: 8px;
+    padding: 4px 12px; text-align: center; white-space: nowrap; min-width: 64px;
   }
-  nav button.on { color: var(--acc); border-bottom-color: var(--acc); }
-  nav button:hover { color: var(--tx); }
+  .stat .v { font: 600 15px/1.2 var(--mono); color: var(--tx); }
+  .stat .k { font-size: 9.5px; text-transform: uppercase; letter-spacing: .8px; color: var(--dim); }
+  .stat.acc .v { color: var(--acc); }
+  .stat.hot .v { color: var(--hot); }
+  .stat.bad .v { color: var(--bad); }
+  .stat.warn .v { color: var(--warn); }
+
+  #refresh {
+    background: var(--panel2); color: var(--tx2); border: 1px solid var(--line);
+    padding: 6px 14px; border-radius: 8px; white-space: nowrap; transition: all .15s;
+  }
+  #refresh:hover { color: var(--acc); border-color: var(--accdim); background: var(--raise); }
+
+  /* ───────────── tabs ───────────── */
+  nav { display: flex; gap: 6px; padding: 8px 18px; background: var(--bg2); border-bottom: 1px solid var(--line); flex-shrink: 0; }
+  nav button {
+    background: transparent; border: 1px solid transparent; color: var(--tx2);
+    padding: 5px 16px; border-radius: 7px; font-weight: 500; letter-spacing: .5px; transition: all .15s;
+  }
+  nav button:hover { color: var(--tx); background: var(--panel2); }
+  nav button.on { color: var(--acc); background: var(--panel2); border-color: var(--accdim); }
 
   main { flex: 1; display: flex; min-height: 0; }
 
-  /* ---------- left: list ---------- */
-  #list-pane { width: 460px; min-width: 320px; display: flex; flex-direction: column; border-right: 1px solid var(--line); flex-shrink: 0; }
-  #filters { display: flex; gap: 6px; padding: 8px; background: var(--panel); flex-wrap: wrap; border-bottom: 1px solid var(--line); }
+  /* ───────────── left: list ───────────── */
+  #list-pane { width: 480px; min-width: 340px; display: flex; flex-direction: column; border-right: 1px solid var(--line); flex-shrink: 0; background: var(--bg2); }
+  #filters { display: flex; gap: 7px; padding: 10px 12px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
   #filters input, #filters select {
-    background: var(--bg); border: 1px solid var(--line); color: var(--tx);
-    font: inherit; padding: 4px 8px; border-radius: 3px; outline: none;
+    background: var(--panel); border: 1px solid var(--line); color: var(--tx);
+    font: 13px var(--sans); padding: 7px 10px; border-radius: 8px; outline: none; transition: border-color .15s;
   }
-  #q { flex: 1; min-width: 140px; }
+  #filters select { padding: 7px 6px; }
+  #q { flex: 1; min-width: 150px; }
+  #q::placeholder { color: var(--dim); }
   #filters input:focus, #filters select:focus { border-color: var(--cy); }
-  #list-meta { padding: 4px 10px; color: var(--dim); font-size: 11px; border-bottom: 1px solid var(--line); }
+  #list-meta { padding: 6px 14px; color: var(--dim); font-size: 11.5px; border-bottom: 1px solid var(--line); }
   #rows { overflow-y: auto; flex: 1; }
-  table { width: 100%; border-collapse: collapse; }
-  th { position: sticky; top: 0; background: var(--panel2); color: var(--dim); font-size: 10px;
-    text-transform: uppercase; letter-spacing: 1px; text-align: left; padding: 5px 8px; cursor: pointer; }
-  th:hover { color: var(--cy); }
-  td { padding: 5px 8px; border-bottom: 1px solid #131b27; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 150px; }
-  tr.row:hover td { background: #16202e; cursor: pointer; }
-  .score { display: inline-block; min-width: 26px; text-align: center; border-radius: 2px; font-weight: 700; }
-  .s-hot { background: #3d1f14; color: var(--hot); }
-  .s-warm { background: #2b2a12; color: var(--warn); }
-  .s-cold { background: #14202b; color: var(--cy); }
-  .mailed { color: var(--acc); }
+  #rows table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  th {
+    position: sticky; top: 0; z-index: 2; background: var(--panel); color: var(--dim);
+    font-size: 10px; text-transform: uppercase; letter-spacing: 1px; font-weight: 600;
+    text-align: left; padding: 7px 8px; user-select: none;
+  }
+  th[data-sort]:hover { color: var(--cy); cursor: pointer; }
+  th.c-sc, th.c-pop, th.c-mail { width: 52px; }
+  th.c-sektor { width: 96px; }
+  th.c-miasto { width: 110px; }
+  td { padding: 7px 8px; border-bottom: 1px solid #131d2e; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  tr.row { cursor: pointer; transition: background .1s; }
+  tr.row:hover td { background: var(--panel2); }
+  tr.row.open td { background: var(--raise); }
+  .score {
+    display: inline-block; min-width: 30px; text-align: center; padding: 1px 0;
+    border-radius: 5px; font: 700 12px/1.5 var(--mono);
+  }
+  .s-hot  { background: rgba(255,122,89,.14); color: var(--hot); }
+  .s-warm { background: rgba(232,182,76,.13); color: var(--warn); }
+  .s-cold { background: rgba(76,195,255,.12); color: var(--cy); }
+  .sektor-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: baseline; }
+  .mailed { color: var(--acc); font: 600 11.5px var(--mono); }
+  .nomail { color: #2c3b52; }
 
-  /* ---------- center tabs ---------- */
+  /* ───────────── center ───────────── */
   #center { flex: 1; display: flex; flex-direction: column; min-width: 0; }
   .view { flex: 1; display: none; min-height: 0; }
   .view.on { display: flex; }
-  #graph { flex: 1; background: var(--bg); }
-  #graph-msg { position: absolute; margin: 40px; color: var(--dim); }
-  .g-ctl { display: flex; gap: 8px; padding: 6px 10px; background: var(--panel); border-top: 1px solid var(--line); align-items: center; }
-  .g-ctl label { color: var(--dim); font-size: 11px; display: flex; gap: 4px; align-items: center; cursor: pointer; }
+  #graph {
+    flex: 1; position: relative;
+    background-image: radial-gradient(#131d2e 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+  #graph-msg {
+    position: absolute; top: 18px; left: 20px; z-index: 5; color: var(--tx2);
+    background: rgba(16,26,41,.92); border: 1px solid var(--line); padding: 6px 14px; border-radius: 8px;
+    font: 12.5px var(--mono);
+  }
+  .g-ctl {
+    display: flex; gap: 14px; align-items: center; padding: 8px 16px;
+    background: var(--bg2); border-top: 1px solid var(--line); flex-wrap: wrap;
+  }
+  .g-ctl .tgl { display: flex; gap: 14px; }
+  .g-ctl label { color: var(--tx2); font-size: 12.5px; display: flex; gap: 6px; align-items: center; cursor: pointer; user-select: none; }
+  .g-ctl input[type=checkbox] { accent-color: var(--acc); }
+  #legend { display: flex; gap: 12px; align-items: center; padding-left: 14px; border-left: 1px solid var(--line); }
+  #legend .lg { display: flex; gap: 5px; align-items: center; color: var(--tx2); font-size: 11.5px; }
+  #legend .lg i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+  #g-count { margin-left: auto; color: var(--dim); font: 11.5px var(--mono); }
 
-  /* ---------- bottom: query console ---------- */
-  #console-pane { height: 240px; display: flex; flex-direction: column; border-top: 1px solid var(--line); background: var(--panel); flex-shrink: 0; }
-  #console-bar { display: flex; gap: 6px; padding: 6px 10px; align-items: center; border-bottom: 1px solid var(--line); }
-  #console-bar .tab { color: var(--dim); cursor: pointer; padding: 2px 8px; border-radius: 3px; font-size: 12px; }
-  #console-bar .tab.on { background: var(--panel2); color: var(--acc); }
-  #dq-in { flex: 1; background: var(--bg); border: 1px solid var(--line); color: var(--cy);
-    font: inherit; padding: 5px 10px; border-radius: 3px; outline: none; }
-  #dq-in:focus { border-color: var(--acc); }
-  #dq-run, .btn { background: var(--panel2); border: 1px solid var(--line); color: var(--tx);
-    padding: 5px 14px; cursor: pointer; font: inherit; border-radius: 3px; }
-  #dq-run:hover, .btn:hover { border-color: var(--acc); color: var(--acc); }
-  #console-out { flex: 1; overflow: auto; padding: 8px 12px; font-size: 12px; }
-  #console-out .err { color: var(--bad); }
-  #console-out .hint { color: var(--dim); }
-  #console-out .n { color: var(--acc); }
-  .ttable td, .ttable th { font-size: 12px; }
+  /* przetargi / surface */
+  #view-tenders, #view-surface { overflow: auto; background: var(--bg2); }
+  .ttable { width: 100%; border-collapse: collapse; }
+  .ttable th { position: sticky; top: 0; background: var(--panel); color: var(--dim); font-size: 10px; text-transform: uppercase; letter-spacing: 1px; text-align: left; padding: 8px 12px; }
+  .ttable td { padding: 8px 12px; border-bottom: 1px solid #131d2e; font-size: 13px; }
+  #surface-out { padding: 18px; }
+  .surface-row { padding: 6px 0; border-bottom: 1px solid #131d2e; display: flex; gap: 10px; align-items: baseline; }
+  .surface-row .dom { font: 12.5px var(--mono); color: var(--cy); }
+  .hintbox { color: var(--tx2); background: var(--panel); border: 1px dashed var(--line2); border-radius: 10px; padding: 18px; margin-bottom: 12px; font-size: 13px; }
 
-  /* ---------- drawer ---------- */
+  /* ───────────── drawer ───────────── */
   #drawer {
-    width: 400px; background: var(--panel); border-left: 1px solid var(--line);
+    width: 420px; background: var(--panel); border-left: 1px solid var(--line);
     display: none; flex-direction: column; overflow-y: auto; flex-shrink: 0;
+    box-shadow: -12px 0 32px rgba(0,0,0,.35);
   }
   #drawer.on { display: flex; }
-  #drawer .head { padding: 12px 14px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--panel); }
-  #drawer .head h2 { font-size: 15px; color: var(--tx); margin-bottom: 4px; }
-  #drawer .head .sub { color: var(--dim); font-size: 11px; }
-  #drawer section { padding: 10px 14px; border-bottom: 1px solid var(--line); }
-  #drawer h3 { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--dim); margin-bottom: 6px; }
-  .kv { display: grid; grid-template-columns: 110px 1fr; gap: 2px 8px; font-size: 12px; }
+  #drawer .head { padding: 16px 18px 12px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--panel); z-index: 3; }
+  #drawer .head h2 { font-size: 15.5px; line-height: 1.35; margin-bottom: 7px; padding-right: 28px; }
+  #drawer .head .sub { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  #drawer-close {
+    position: absolute; right: 12px; top: 12px; background: var(--panel2); border: 1px solid var(--line);
+    color: var(--tx2); width: 28px; height: 28px; border-radius: 7px; line-height: 1;
+  }
+  #drawer-close:hover { color: var(--bad); border-color: var(--bad); }
+  #drawer section { padding: 13px 18px; border-bottom: 1px solid var(--line); }
+  #drawer h3 {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 1.2px;
+    color: var(--dim); margin-bottom: 9px; font-weight: 600;
+  }
+  .kv { display: grid; grid-template-columns: 105px 1fr; gap: 3px 10px; font-size: 13px; }
   .kv .k { color: var(--dim); }
-  .pill { display: inline-block; padding: 0 6px; border-radius: 2px; font-size: 11px; margin-right: 4px; }
-  .p-ok { background: #12291c; color: var(--acc); }
-  .p-bad { background: #2d1517; color: var(--bad); }
-  .p-dim { background: var(--panel2); color: var(--dim); }
-  .em { color: var(--cy); cursor: pointer; }
-  .em:hover { text-decoration: underline; }
-  .tl { list-style: none; font-size: 12px; }
-  .tl li { padding: 3px 0; border-bottom: 1px dashed #17202d; }
-  .tl .t { color: var(--dim); margin-right: 6px; }
-  #drawer-close { position: absolute; right: 10px; top: 10px; background: none; border: none;
-    color: var(--dim); font-size: 16px; cursor: pointer; }
-  #drawer-close:hover { color: var(--bad); }
+  .pill {
+    display: inline-block; padding: 1px 8px; border-radius: 20px;
+    font-size: 11px; font-weight: 500; margin-right: 4px;
+  }
+  .p-ok  { background: rgba(61,220,151,.13); color: var(--acc); }
+  .p-bad { background: rgba(255,93,108,.13); color: var(--bad); }
+  .p-dim { background: var(--panel2); color: var(--tx2); }
+  .em { font: 12.5px var(--mono); color: var(--cy); cursor: pointer; border-radius: 4px; padding: 0 2px; }
+  .em:hover { background: var(--raise); }
+  .tl { list-style: none; font-size: 12.5px; }
+  .tl li { padding: 5px 0; border-bottom: 1px dashed #182438; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+  .tl .t { color: var(--dim); font: 11px var(--mono); white-space: nowrap; }
+
+  /* ───────────── console ───────────── */
+  #console-pane {
+    height: 230px; display: flex; flex-direction: column;
+    border-top: 1px solid var(--line); background: #0a0f18; flex-shrink: 0;
+  }
+  #console-bar { display: flex; gap: 8px; padding: 9px 14px; align-items: center; border-bottom: 1px solid var(--line); }
+  #console-bar .tag {
+    color: var(--acc); font: 600 11px var(--mono); background: rgba(61,220,151,.1);
+    border: 1px solid var(--accdim); border-radius: 6px; padding: 4px 10px; white-space: nowrap;
+  }
+  #dq-in {
+    flex: 1; background: var(--panel); border: 1px solid var(--line); color: var(--cy);
+    font: 13px var(--mono); padding: 7px 12px; border-radius: 8px; outline: none; transition: border-color .15s;
+  }
+  #dq-in:focus { border-color: var(--acc); }
+  #dq-in::placeholder { color: var(--dim); }
+  #dq-run, .btn {
+    background: var(--panel2); border: 1px solid var(--line); color: var(--tx);
+    padding: 7px 16px; border-radius: 8px; font-weight: 500; transition: all .15s;
+  }
+  #dq-run { color: var(--acc); border-color: var(--accdim); }
+  #dq-run:hover { background: var(--raise); }
+  .btn:hover { border-color: var(--line2); color: var(--tx); }
+  #console-out { flex: 1; overflow: auto; padding: 10px 16px; font: 12.5px/1.6 var(--mono); }
+  #console-out .err { color: var(--bad); }
+  #console-out .hint { color: var(--dim); }
+  #console-out .n { color: var(--acc); font-weight: 700; }
+  #console-out .rrow { color: var(--tx2); }
+  #console-out .rrow::before { content: "▸ "; color: var(--accdim); }
 
   #toast {
-    position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
-    background: var(--panel2); border: 1px solid var(--bad); color: var(--tx);
-    padding: 8px 16px; border-radius: 4px; display: none; z-index: 99; max-width: 80%;
+    position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
+    background: var(--raise); border: 1px solid var(--line2); color: var(--tx);
+    padding: 9px 18px; border-radius: 10px; display: none; z-index: 99; max-width: 80%;
+    font-size: 13px; box-shadow: 0 8px 30px rgba(0,0,0,.5);
+  }
+  #toast.err { border-color: var(--bad); }
+
+  kbd {
+    background: var(--panel2); border: 1px solid var(--line2); border-bottom-width: 2px;
+    border-radius: 4px; padding: 0 5px; font: 11px var(--mono); color: var(--tx2);
   }
 </style>
 </head>
 <body>
 
 <header>
-  <span class="logo">SCRYER <small>// hartwell-labs ontologia</small></span>
+  <div class="logo"><b>SCRYER</b><span>hartwell-labs / ontologia</span></div>
   <span id="dot" title="API status"></span>
-  <div class="chips" id="chips"></div>
-  <button id="refresh" title="odswiez (R)">⟳ refresh</button>
+  <div id="stats"></div>
+  <button id="refresh" title="odśwież (R)">⟳ Odśwież</button>
 </header>
 
 <nav>
-  <button data-tab="graph" class="on">GRAF</button>
-  <button data-tab="tenders">PRZETARGI</button>
-  <button data-tab="surface">ATTACK SURFACE</button>
+  <button data-tab="graph" class="on">Graf</button>
+  <button data-tab="tenders">Przetargi</button>
+  <button data-tab="surface">Attack Surface</button>
 </nav>
 
 <main>
   <div id="list-pane">
     <div id="filters">
-      <input id="q" placeholder="szukaj: nazwa / miasto / nip / email / domena   ( / )" autocomplete="off">
+      <input id="q" placeholder="Szukaj — nazwa, miasto, NIP, e-mail, domena…" autocomplete="off">
       <select id="f-sektor"><option value="">sektor: all</option></select>
       <select id="f-kontakt">
         <option value="">kontakt: all</option>
@@ -162,18 +252,22 @@
         <option value="yes">skontaktowani</option>
       </select>
       <select id="f-sort">
-        <option value="score">sort: score</option>
-        <option value="pop">sort: pop</option>
-        <option value="nazwa">sort: nazwa</option>
-        <option value="maile">sort: maile</option>
+        <option value="score">score ↓</option>
+        <option value="pop">populacja ↓</option>
+        <option value="nazwa">nazwa A→Z</option>
+        <option value="maile">maile ↓</option>
       </select>
     </div>
     <div id="list-meta">—</div>
     <div id="rows">
       <table>
         <thead><tr>
-          <th data-sort="score">SC</th><th data-sort="nazwa">PODMIOT</th>
-          <th data-sort="pop">POP</th><th>SEKTOR</th><th>MIASTO</th><th>MAIL</th>
+          <th class="c-sc" data-sort="score">SC</th>
+          <th data-sort="nazwa">Podmiot</th>
+          <th class="c-pop" data-sort="pop">Pop</th>
+          <th class="c-sektor">Sektor</th>
+          <th class="c-miasto" data-sort="">Miasto</th>
+          <th class="c-mail" data-sort="maile">Mail</th>
         </tr></thead>
         <tbody id="tbody"></tbody>
       </table>
@@ -182,42 +276,43 @@
 
   <div id="center">
     <div class="view on" id="view-graph">
-      <div id="graph" style="position:relative">
-        <div id="graph-msg">graf ontologii — wczytywanie…</div>
-      </div>
+      <div id="graph"><div id="graph-msg">inicjalizacja…</div></div>
       <div class="g-ctl">
-        <label><input type="checkbox" id="g-domeny"> domeny</label>
-        <label><input type="checkbox" id="g-osoby"> osoby</label>
-        <label><input type="checkbox" id="g-only-hot"> tylko HOT (score≥15)</label>
-        <span id="legend" style="display:flex;gap:8px;margin-left:12px"></span>
-        <label style="margin-left:auto" id="g-count">—</label>
+        <span class="tgl">
+          <label><input type="checkbox" id="g-domeny"> domeny</label>
+          <label><input type="checkbox" id="g-osoby"> osoby</label>
+          <label><input type="checkbox" id="g-only-hot"> tylko HOT</label>
+        </span>
+        <span id="legend"></span>
+        <span id="g-count">—</span>
       </div>
     </div>
-    <div class="view" id="view-tenders" style="overflow:auto">
+    <div class="view" id="view-tenders">
       <table class="ttable"><thead><tr>
-        <th>SC</th><th>TYTUL</th><th>ORG</th><th>DEADLINE</th><th>CPV</th><th></th>
+        <th style="width:52px">SC</th><th>Tytuł</th><th>Organizator</th><th style="width:110px">Deadline</th><th style="width:150px">CPV</th>
       </tr></thead><tbody id="tenders-tb"></tbody></table>
     </div>
-    <div class="view" id="view-surface" style="overflow:auto">
-      <div id="surface-out" style="padding:12px"></div>
-    </div>
+    <div class="view" id="view-surface"><div id="surface-out"></div></div>
   </div>
 
-  <div id="drawer"><div style="position:relative">
-    <button id="drawer-close">✕</button>
-    <div class="head"><h2 id="d-name">—</h2><div class="sub" id="d-sub"></div></div>
+  <div id="drawer">
+    <div class="head">
+      <button id="drawer-close" title="zamknij (Esc)">✕</button>
+      <h2 id="d-name">—</h2>
+      <div class="sub" id="d-sub"></div>
+    </div>
     <div id="d-body"></div>
-  </div></div>
+  </div>
 </main>
 
 <div id="console-pane">
   <div id="console-bar">
-    <span class="tab on" data-c="dq">dQuery</span>
-    <input id="dq-in" placeholder='podmioty[sektor=water,pop>100000] !interakcje[email_sent] limit 30' autocomplete="off">
-    <button id="dq-run">run ▸</button>
-    <button class="btn" id="dq-export">export jsonl</button>
+    <span class="tag">dQuery</span>
+    <input id="dq-in" placeholder='podmioty[sektor=wodociagi,pop>100000] !interakcje[email_sent] limit 30' autocomplete="off" spellcheck="false">
+    <button id="dq-run">Run ⏎</button>
+    <button class="btn" id="dq-export" title="zapisz wynik do pliku">⤓ export</button>
   </div>
-  <div id="console-out"><span class="hint">język zapytań: obiekt[filtr=wartość] !negacja limit N · obiekty: podmioty / przetargi / interakcje · "/`" fokusuje, Enter runuje</span></div>
+  <div id="console-out"><span class="hint">Obiekty: podmioty / przetargi / interakcje · filtry: klucz=wartość, pop>N, nazwa~frag · negacja: !interakcje[email_sent] · <kbd>/</kbd> szukaj · <kbd>R</kbd> odśwież</span></div>
 </div>
 
 <div id="toast"></div>
@@ -225,11 +320,14 @@
 <script>
 "use strict";
 const $ = (s) => document.querySelector(s);
+const $$ = (s) => [...document.querySelectorAll(s)];
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
 
 const SECTOR_COLORS = {
-  water: "#58c4dd", health: "#f85149", admin: "#e3b341", education: "#b18ce8",
-  energy: "#ffa657", transport: "#39d2c0", gov: "#4cc38a", other: "#6b7a90",
+  wodociagi: "#4cc3ff", szpital: "#ff5d6c", "admin-publiczna": "#e8b64c",
+  education: "#b18ce8", energy: "#ffa657", transport: "#39d2c0",
+  gov: "#3ddc97", water: "#4cc3ff", health: "#ff5d6c", admin: "#e8b64c",
+  other: "#5d7089",
 };
 const colorOf = (s) => SECTOR_COLORS[s] || SECTOR_COLORS.other;
 
@@ -242,28 +340,32 @@ async function api(path, opts) {
   }
   return r.json();
 }
-function toast(msg) {
+function toast(msg, isErr) {
   const t = $("#toast");
-  t.textContent = msg; t.style.display = "block";
-  clearTimeout(t._h); t._h = setTimeout(() => t.style.display = "none", 4000);
+  t.textContent = msg;
+  t.classList.toggle("err", !!isErr);
+  t.style.display = "block";
+  clearTimeout(t._h); t._h = setTimeout(() => t.style.display = "none", 3500);
 }
+const fmtN = (n) => n >= 1e6 ? (n/1e6).toFixed(1).replace(".0","") + " mln" : n >= 1e3 ? Math.round(n/1e3) + "k" : String(n ?? 0);
 
 /* ---------------- stats ---------------- */
 async function loadStats() {
   try {
     const s = await api("/api/stats");
     $("#dot").classList.add("ok");
-    $("#chips").innerHTML = [
+    $("#stats").innerHTML = [
       ["podmioty", s.podmioty, ""], ["domeny", s.domeny, ""], ["osoby", s.osoby, ""],
       ["przetargi", s.przetargi, ""], ["interakcje", s.interakcje, ""],
-      ["skontaktowani", s.skontaktowani, "acc"], ["HOT", s.hot, "hot"], ["bez DMARC", s.bez_dmarc, "bad"],
-    ].map(([k, v, cls]) => `<span class="chip ${cls}" data-chip="${k}">${k}: <b>${v}</b></span>`).join("");
+      ["skontaktowani", s.skontaktowani, "acc"], ["HOT", s.hot, "hot"],
+      ["bez DMARC", s.bez_dmarc, s.bez_dmarc ? "bad" : ""],
+    ].map(([k, v, cls]) => `<div class="stat ${cls}"><div class="v">${v}</div><div class="k">${k}</div></div>`).join("");
     const sel = $("#f-sektor");
     const cur = sel.value;
     sel.innerHTML = '<option value="">sektor: all</option>' +
       s.sektors.filter(x => x.sektor).map(x => `<option value="${esc(x.sektor)}">${esc(x.sektor)} (${x.n})</option>`).join("");
     sel.value = cur;
-  } catch (e) { $("#dot").classList.remove("ok"); toast("API: " + e.message); }
+  } catch (e) { $("#dot").classList.remove("ok"); toast("API: " + e.message, true); }
 }
 
 /* ---------------- lista podmiotów ---------------- */
@@ -277,60 +379,63 @@ async function loadPodmioty() {
   $("#list-meta").textContent = "szukam…";
   try {
     const d = await api("/api/podmioty?" + p);
-    $("#list-meta").textContent = `${d.count} / ${d.total} podmiotów`;
+    $("#list-meta").textContent = `wyróżnionych ${d.count} z ${d.total} podmiotów`;
     $("#tbody").innerHTML = d.items.map(it => {
       const cls = it.tier_score >= 15 ? "s-hot" : it.tier_score >= 8 ? "s-warm" : "s-cold";
       return `<tr class="row" data-id="${it.id}">
         <td><span class="score ${cls}">${it.tier_score}</span></td>
         <td title="${esc(it.nazwa)}">${esc(it.nazwa)}</td>
-        <td>${it.pop ? fmtN(it.pop) : "—"}</td>
-        <td style="color:${colorOf(it.sektor)}">${esc(it.sektor || "—")}</td>
+        <td style="font:12px var(--mono);color:var(--tx2)">${it.pop ? fmtN(it.pop) : "—"}</td>
+        <td><span class="sektor-dot" style="background:${colorOf(it.sektor)}"></span>${esc(it.sektor || "—")}</td>
         <td title="${esc(it.miasto)}">${esc(it.miasto || "—")}</td>
-        <td>${it.maile ? `<span class="mailed">●${it.maile}</span>` : "—"}</td>
+        <td>${it.maile ? `<span class="mailed">✉${it.maile}</span>` : '<span class="nomail">·</span>'}</td>
       </tr>`;
     }).join("");
   } catch (e) { $("#list-meta").textContent = "BŁĄD: " + e.message; }
 }
-const fmtN = (n) => n >= 1e6 ? (n/1e6).toFixed(1) + "M" : n >= 1e3 ? Math.round(n/1e3) + "k" : String(n);
 
 /* ---------------- drawer ---------------- */
 async function showPodmiot(id) {
   try {
+    $$("#tbody tr").forEach(tr => tr.classList.toggle("open", tr.dataset.id == id));
     const d = await api("/api/podmiot/" + id);
     const p = d.podmiot;
     $("#d-name").textContent = p.nazwa;
     $("#d-sub").innerHTML =
-      `<span class="score ${p.tier_score>=15?"s-hot":p.tier_score>=8?"s-warm":"s-cold"}">${p.tier_score}</span> ` +
-      `<span style="color:${colorOf(p.sektor)}">${esc(p.sektor||"—")}</span> · KSC: ${esc(p.ksc_status)}`;
-    const ts = (u) => u ? new Date(u*1000).toLocaleString("pl-PL") : "—";
+      `<span class="score ${p.tier_score>=15?"s-hot":p.tier_score>=8?"s-warm":"s-cold"}">${p.tier_score}</span>` +
+      `<span class="pill p-dim"><span class="sektor-dot" style="background:${colorOf(p.sektor)}"></span>${esc(p.sektor||"—")}</span>` +
+      `<span class="pill p-dim">KSC: ${esc(p.ksc_status)}</span>`;
+    const ts = (u) => u ? new Date(u*1000).toLocaleString("pl-PL", {dateStyle:"short", timeStyle:"short"}) : "—";
     $("#d-body").innerHTML = `
-      <section><h3>profil</h3><div class="kv">
-        <span class="k">NIP</span><span>${esc(p.nip)||"—"}</span>
+      <section><h3>Profil</h3><div class="kv">
+        <span class="k">NIP</span><span style="font:12.5px var(--mono)">${esc(p.nip)||"—"}</span>
         <span class="k">miasto</span><span>${esc(p.miasto)||"—"}</span>
         <span class="k">województwo</span><span>${esc(p.wojewodztwo)||"—"}</span>
         <span class="k">populacja</span><span>${p.pop?fmtN(p.pop):"—"}</span>
         <span class="k">źródła</span><span>${esc(p.zrodla)||"—"}</span>
       </div></section>
-      <section><h3>domeny / poczta</h3>${
-        d.domeny.length ? d.domeny.map(x => `<div style="margin-bottom:4px">
-          <b>${esc(x.nazwa)}</b> ${x.mx?'<span class="pill p-ok">MX</span>':'<span class="pill p-dim">no-MX</span>'}
+      <section><h3>Domeny / poczta</h3>${
+        d.domeny.length ? d.domeny.map(x => `<div style="margin-bottom:6px">
+          <div style="font:13px var(--mono)">${esc(x.nazwa)}</div>
+          ${x.mx?'<span class="pill p-ok">MX</span>':'<span class="pill p-dim">no-MX</span>'}
           ${x.dmarc?'<span class="pill p-ok">DMARC</span>':'<span class="pill p-bad">bez DMARC</span>'}
           ${x.spf?'':'<span class="pill p-bad">bez SPF</span>'}
         </div>`).join("") : '<span class="hint">brak domen</span>'
       }</section>
-      <section><h3>osoby (${d.osoby.length})</h3>${
-        d.osoby.map(o => `<div><span class="em" data-copy="${esc(o.email)}" title="kliknij = kopiuj">${esc(o.email)}</span>
-          <span class="pill p-dim">${esc(o.rola)||"—"}</span></div>`).join("") || "—"
+      <section><h3>Osoby (${d.osoby.length})</h3>${
+        d.osoby.map(o => `<div style="margin-bottom:4px"><span class="em" data-copy="${esc(o.email)}" title="klik = kopiuj">${esc(o.email)}</span>
+          ${o.rola?`<span class="pill p-dim">${esc(o.rola)}</span>`:""}</div>`).join("") || "—"
       }</section>
-      <section><h3>interakcje (${d.interakcje.length})</h3><ul class="tl">${
+      <section><h3>Interakcje (${d.interakcje.length})</h3><ul class="tl">${
         d.interakcje.map(i => `<li><span class="t">${ts(i.ts)}</span>
           <span class="pill ${i.typ==="email_sent"?"p-ok":"p-dim"}">${esc(i.typ)}</span>
-          ${esc(i.email)} — ${esc(i.temat)}</li>`).join("") || "<li>—</li>"
+          <span style="font:12px var(--mono);color:var(--tx2)">${esc(i.email)}</span>
+          <span>${esc(i.temat)}</span></li>`).join("") || "<li>—</li>"
       }</ul></section>`;
     $("#drawer").classList.add("on");
-  } catch (e) { toast(e.message); }
+  } catch (e) { toast(e.message, true); }
 }
-$("#drawer-close").onclick = () => $("#drawer").classList.remove("on");
+$("#drawer-close").onclick = () => { $("#drawer").classList.remove("on"); $$("#tbody tr").forEach(tr => tr.classList.remove("open")); };
 document.addEventListener("click", (ev) => {
   const em = ev.target.closest("[data-copy]");
   if (em) { navigator.clipboard?.writeText(em.dataset.copy); toast("skopiowano: " + em.dataset.copy); }
@@ -366,64 +471,74 @@ function renderGraph() {
   const showD = $("#g-domeny").checked, showO = $("#g-osoby").checked, onlyHot = $("#g-only-hot").checked;
   const emailed = new Set(GRAPH.emailed || []);
   const n = [], e = [];
-  // legenda sektorów (raz)
   if (!$("#legend").childElementCount) {
     $("#legend").innerHTML = Object.entries(SECTOR_COLORS)
-      .filter(([k]) => k !== "other")
-      .map(([k, c]) => `<span style="color:${c}">■${k}</span>`).join("");
+      .filter(([k]) => !["other","water","health","admin"].includes(k))
+      .map(([k, c]) => `<span class="lg"><i style="background:${c}"></i>${k}</span>`).join("");
   }
   for (const p of GRAPH.podmioty) {
     if (onlyHot && p.score < 15) continue;
-    n.push({ id: "p" + p.id, label: p.nazwa.length > 34 ? p.nazwa.slice(0, 33) + "…" : p.nazwa,
-      title: `${p.nazwa}\nscore: ${p.score}\nmiasto: ${p.miasto||"—"}`,
-      group: "podmiot", value: Math.max(3, Math.sqrt(p.pop || 1) / 12 + p.score / 3),
-      color: { background: colorOf(p.sektor), border: p.score >= 15 ? "#ff7b54" : "#0a0e14" },
-      font: { color: p.score >= 15 ? "#ff7b54" : "#c9d4e3", size: 12 }, _podmiot: p.id });
+    const hot = p.score >= 15;
+    n.push({
+      id: "p" + p.id,
+      label: p.nazwa.length > 36 ? p.nazwa.slice(0, 35) + "…" : p.nazwa,
+      title: `${p.nazwa}\nscore: ${p.score}\nmiasto: ${p.miasto || "—"}\n(klik = profil)`,
+      shape: "box",
+      shapeProperties: { borderRadius: 6 },
+      margin: 7,
+      borderWidth: hot ? 2 : 1,
+      color: {
+        background: hot ? "#2b1a16" : "#14202f",
+        border: hot ? "#ff7a59" : "#26374f",
+        highlight: { background: "#1d2f47", border: colorOf(p.sektor) },
+      },
+      font: { face: "monospace", size: 11, color: hot ? "#ffb39e" : "#c7d3e2" },
+      _podmiot: p.id,
+    });
   }
   if (showD) for (const d of GRAPH.domeny) {
-    n.push({ id: "d" + d.id, label: d.nazwa, group: "domena", shape: "dot", size: 5,
-      color: { background: d.mx ? "#58c4dd" : "#3a4657" },
-      font: { size: 9, color: "#6b7a90" }, title: `${d.nazwa}\nMX: ${d.mx?"tak":"nie"}\nDMARC: ${d.dmarc||"BRAK"}` });
-    e.push({ from: "p" + d.podmiot_id, to: "d" + d.id, color: { color: "#1f2a3a" } });
+    n.push({
+      id: "d" + d.id, label: d.nazwa, shape: "dot",
+      size: 5, color: { background: d.mx ? "#4cc3ff" : "#33415a", border: "transparent" },
+      font: { size: 9, color: "#5d7089", face: "monospace" },
+      title: `${d.nazwa}\nMX: ${d.mx ? "tak" : "nie"}\nDMARC: ${d.dmarc || "BRAK"}`,
+    });
+    e.push({ from: "p" + d.podmiot_id, to: "d" + d.id, color: { color: "#1b2940" } });
   }
   if (showO) for (const o of GRAPH.osoby) {
     const got = emailed.has(o.email);
-    n.push({ id: "o" + o.id, label: got ? "✉ " + o.email : o.email, group: "osoba", shape: "triangle", size: 4,
-      color: { background: got ? "#4cc38a" : "#2c3a4d" }, font: { size: 9, color: got ? "#4cc38a" : "#445468" }, title: o.email });
-    e.push({ from: "p" + o.podmiot_id, to: "o" + o.id, color: { color: "#17202d" } });
+    n.push({
+      id: "o" + o.id, label: got ? "✉ " + o.email : o.email, shape: "dot", size: 4,
+      color: { background: got ? "#3ddc97" : "#2a3a52", border: "transparent" },
+      font: { size: 9, color: got ? "#3ddc97" : "#42536d", face: "monospace" }, title: o.email,
+    });
+    e.push({ from: "p" + o.podmiot_id, to: "o" + o.id, color: { color: "#16222f" } });
   }
   nodes = new vis.DataSet(n); edges = new vis.DataSet(e);
   const container = $("#graph");
   container.innerHTML = "";
-  // cięższy graf = krótsza stabilizacja, bez wygładzania krawędzi (perf)
-  const heavy = n.length > 400;
+  $("#graph").insertAdjacentHTML("beforeend", '<div id="graph-msg"></div>');
   const network = new vis.Network(container, { nodes, edges }, {
+    autoResize: true,
     physics: {
       solver: "barnesHut",
-      barnesHut: { gravitationalConstant: heavy ? -9000 : -6000, springLength: 90 },
-      stabilization: {
-        enabled: true,
-        iterations: heavy ? 120 : 250,
-        fit: true,
-      },
+      barnesHut: { gravitationalConstant: -3200, springConstant: 0.045, springLength: 110, damping: 0.45, avoidOverlap: 0.1 },
+      stabilization: { enabled: true, iterations: 220, fit: true },
     },
-    interaction: { hover: true, tooltipDelay: 120, hideEdgesOnDrag: true },
-    nodes: { shape: "box", margin: 5, borderWidth: 1, font: { face: "monospace" } },
-    edges: { color: { color: "#1f2a3a" }, smooth: false },
+    interaction: { hover: true, tooltipDelay: 140, hideEdgesOnDrag: true, navigationButtons: false },
+    nodes: { shape: "box", font: { face: "monospace" } },
+    edges: { color: { color: "#1e2d45" }, smooth: false, selectionWidth: 2 },
   });
   network.on("stabilizationProgress", (p) => {
     const pct = Math.round((p.iterations / p.total) * 100);
     $("#graph-msg").textContent = `stabilizacja grafu… ${pct}%`;
   });
-  network.on("stabilizationIterationsDone", () => {
-    $("#graph-msg").textContent = "";
-  });
-  network.once("stabilizationIterationsDone", () => network.fit());
+  network.on("stabilizationIterationsDone", () => { $("#graph-msg").remove(); network.fit(); });
   network.on("click", (params) => {
     const id = params.nodes[0];
     if (id && String(id).startsWith("p")) showPodmiot(Number(String(id).slice(1)));
   });
-  $("#g-count").textContent = `${n.length} węzłów / ${e.length} krawędzi`;
+  $("#g-count").textContent = `${n.length} węzłów · ${e.length} krawędzi`;
 }
 ["#g-domeny", "#g-osoby", "#g-only-hot"].forEach(sel => $(sel).onchange = () => graphBuilt && renderGraph());
 
@@ -431,21 +546,21 @@ function renderGraph() {
 async function loadTenders() {
   try {
     const d = await api("/api/tenders");
-    $("#tenders-tb").innerHTML = d.items.map(t => `<tr class="row">
+    $("#tenders-tb").innerHTML = d.items.map(t => `<tr>
       <td><span class="score ${t.match_score>=15?"s-hot":t.match_score>=8?"s-warm":"s-cold"}">${t.match_score}</span></td>
       <td title="${esc(t.tytul)}"><a href="${esc(t.url)}" target="_blank" rel="noopener">${esc(t.tytul)}</a></td>
-      <td>${esc(t.org)}</td><td>${esc(t.deadline)}</td><td>${esc(t.cpv)}</td></tr>`).join("")
-      || '<tr><td colspan="6" class="hint">brak przetargów (import BZP/TED)</td></tr>';
-  } catch (e) { toast(e.message); }
+      <td>${esc(t.org)}</td><td style="font:12px var(--mono)">${esc(t.deadline)}</td><td style="font:12px var(--mono);color:var(--tx2)">${esc(t.cpv)}</td></tr>`).join("")
+      || '<tr><td colspan="5"><div class="hintbox">Brak przetargów w grafie. Import przez <code>scryer-core tenders &lt;bzp.json&gt;</code> (BZP/TED — v0.6 czeka na klucz API).</div></td></tr>';
+  } catch (e) { toast(e.message, true); }
 }
 async function loadSurface() {
   try {
     const d = await api("/api/attack-surface");
     $("#surface-out").innerHTML = d.items.length
-      ? `<p style="color:var(--dim);margin-bottom:8px">HOT podmioty (score≥15) z domeną bez DMARC — gotowa amunicja pierwszego maila:</p>` +
-        d.items.map(x => `<div style="padding:3px 0">▸ <b>${esc(x.nazwa)}</b> — <span class="em">${esc(x.domena)}</span></div>`).join("")
-      : '<span class="hint">brak sygnałów — HOT-y z dziurawym DMARC-em się skończyły</span>';
-  } catch (e) { toast(e.message); }
+      ? `<div class="hintbox">HOT-podmioty (score ≥ 15) z domeną bez DMARC — amunicja na pierwszy mail: <i>„ma pan/pani pocztę otwartą na spoofing”</i>.</div>` +
+        d.items.map(x => `<div class="surface-row"><b>${esc(x.nazwa)}</b><span class="dom">${esc(x.domena)}</span></div>`).join("")
+      : '<div class="hintbox">Brak sygnałów — HOT-y z dziurawym DMARC-em się skończyły. Uruchom scoring, żeby podbić tier_score dla bazy.</div>';
+  } catch (e) { toast(e.message, true); }
 }
 
 /* ---------------- dQuery ---------------- */
@@ -457,29 +572,25 @@ async function runQuery(q) {
       body: JSON.stringify({ q }),
     });
     out.innerHTML = `<div><span class="n">${d.count}</span> wyników:</div>` +
-      d.rows.map(r => `<div>▸ ${esc(r)}</div>`).join("");
+      d.rows.map(r => `<div class="rrow">${esc(r)}</div>`).join("");
   } catch (e) { out.innerHTML = `<div class="err">błąd: ${esc(e.message)}</div>`; }
 }
 
 /* ---------------- events ---------------- */
-document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
-  document.querySelectorAll("nav button").forEach(x => x.classList.remove("on"));
+$$("nav button").forEach(b => b.onclick = () => {
+  $$("nav button").forEach(x => x.classList.remove("on"));
   b.classList.add("on");
-  document.querySelectorAll(".view").forEach(v => v.classList.remove("on"));
+  $$(".view").forEach(v => v.classList.remove("on"));
   $("#view-" + b.dataset.tab).classList.add("on");
   if (b.dataset.tab === "graph") buildGraph();
   if (b.dataset.tab === "tenders") loadTenders();
   if (b.dataset.tab === "surface") loadSurface();
 });
-document.querySelectorAll("#console-bar .tab").forEach(b => b.onclick = () => {
-  document.querySelectorAll("#console-bar .tab").forEach(x => x.classList.remove("on"));
-  b.classList.add("on");
-});
 
 let deb;
 $("#q").addEventListener("input", () => { clearTimeout(deb); deb = setTimeout(loadPodmioty, 250); });
 ["#f-sektor", "#f-kontakt"].forEach(s => $(s).onchange = loadPodmioty);
-document.querySelectorAll("th[data-sort]").forEach(th => th.onclick = () => { sortKey = th.dataset.sort; loadPodmioty(); });
+$$("th[data-sort]").forEach(th => th.onclick = () => { if (th.dataset.sort) { sortKey = th.dataset.sort; loadPodmioty(); } });
 $("#tbody").addEventListener("click", (ev) => {
   const tr = ev.target.closest("tr.row");
   if (tr) showPodmiot(Number(tr.dataset.id));
@@ -487,23 +598,25 @@ $("#tbody").addEventListener("click", (ev) => {
 $("#dq-run").onclick = () => { const q = $("#dq-in").value.trim(); if (q) runQuery(q); };
 $("#dq-in").addEventListener("keydown", (ev) => { if (ev.key === "Enter") $("#dq-run").click(); });
 $("#dq-export").onclick = () => {
-  const rows = [...$("#console-out").querySelectorAll("div")].map(d => d.textContent.replace(/^▸ /, ""));
-  if (!rows.length) return toast("nic do eksportu");
+  const rows = [...$("#console-out").querySelectorAll(".rrow")].map(d => d.textContent);
+  if (!rows.length) return toast("nic do eksportu — najpierp odpal zapytanie", true);
   const blob = new Blob([rows.join("\n")], { type: "application/jsonl" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob); a.download = "scryer-query.jsonl"; a.click();
 };
 $("#refresh").onclick = () => { loadStats(); loadPodmioty(); if (graphBuilt) buildGraph(); };
 document.addEventListener("keydown", (ev) => {
-  if (ev.key === "/" && document.activeElement.tagName !== "INPUT") { ev.preventDefault(); $("#q").focus(); }
-  if (ev.key === "Escape") $("#drawer").classList.remove("on");
-  if (ev.key.toLowerCase() === "r" && document.activeElement.tagName !== "INPUT") $("#refresh").click();
+  const typing = ["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement.tagName);
+  if (ev.key === "/" && !typing) { ev.preventDefault(); $("#q").focus(); }
+  if (ev.key === "`" && !typing) { ev.preventDefault(); $("#dq-in").focus(); }
+  if (ev.key === "Escape") $("#drawer-close").click();
+  if (ev.key.toLowerCase() === "r" && !typing) $("#refresh").click();
 });
 
 /* ---------------- boot ---------------- */
 loadStats();
 loadPodmioty();
-buildGraph(); // GRAF to domyślna zakładka — bez tego wisiał „wczytywanie…” na zawsze
+buildGraph(); // GRAF to domyślna zakładka — startuj od razu
 setInterval(loadStats, 30000);
 </script>
 </body>
