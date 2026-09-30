@@ -25,6 +25,7 @@ function GraphEngine(container, opts) {
   let alpha = 0;             // temperatura layoutu (1→0)
   let raf = 0;
   let hovered = -1, selected = -1;
+  let followIdx = -1;          // kamera śledzi węzeł (follow mode)
   let needLabelDraw = true;
   const ALPHA_MIN = 0.002;
 
@@ -520,8 +521,14 @@ function GraphEngine(container, opts) {
       stepPhysics();
       if (opts.onProgress) opts.onProgress(1 - alpha);
     }
+    // follow: kamera dołapuje węzeł (ease) — działa też po stabilizacji
+    if (followIdx >= 0 && nodes[followIdx]) {
+      const n = nodes[followIdx];
+      cx += (n.x - cx) * 0.14;
+      cy += (n.y - cy) * 0.14;
+    }
     draw();
-    if (alpha > 0 || pendingFit) {
+    if (alpha > 0 || pendingFit || followIdx >= 0) {
       if (alpha === 0 && pendingFit) { pendingFit = false; fitView(true); }
       raf = requestAnimationFrame(frame);
     } else {
@@ -570,6 +577,7 @@ function GraphEngine(container, opts) {
   }
   glCanvas.addEventListener("mousedown", (e) => {
     dragging = true; moved = 0;
+    followIdx = -1; // użytkownik przejmuje kamerę
     [lastX, lastY] = evDev(e);
     glCanvas.setPointerCapture?.(e.pointerId);
   });
@@ -655,7 +663,29 @@ function GraphEngine(container, opts) {
   /* ---------- API ---------- */
   return {
     setData,
-    fitView: (animated) => fitView(animated !== false),
+    fitView: (animated) => { followIdx = -1; fitView(animated !== false); },
+    // kamera śledzi węzeł (id z danych, np. "p123") aż do interakcji użytkownika
+    follow(id) {
+      followIdx = id !== null && byId.has(id) ? byId.get(id) : -1;
+      if (followIdx >= 0) {
+        // przybliż na cel
+        const n = nodes[followIdx];
+        const cw = W / dpr, ch = H / dpr;
+        if (cw > 10) {
+          const target = Math.min(1.1, scale * 2);
+          const s0 = scale, c0x = cx, c0y = cy, t0 = performance.now();
+          const tick = (t) => {
+            const p = Math.min(1, (t - t0) / 320);
+            const e = 1 - Math.pow(1 - p, 3);
+            scale = s0 + (target - s0) * e;
+            if (p < 1) requestAnimationFrame(tick);
+          };
+          requestAnimationFrame(tick);
+        }
+        wake();
+      }
+    },
+    get following() { return followIdx >= 0; },
     select(id) { selected = id !== null && byId.has(id) ? byId.get(id) : -1; wake(); },
     hover(id) { hovered = id !== null && byId.has(id) ? byId.get(id) : -1; wake(); },
     destroy() {

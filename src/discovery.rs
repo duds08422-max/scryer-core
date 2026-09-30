@@ -472,6 +472,140 @@ fn html_unescape(s: &str) -> String {
         .replace("&nbsp;", " ")
 }
 
+// ───────────────────────────── internet search (OSINT-first) ─────────────
+
+/// Wynik wyszukiwania internetowego gotowy do cache'owania w ontologii.
+#[derive(Debug, Clone)]
+pub struct SearchHit {
+    pub domain: String,
+    pub title: String,
+    pub url: String,
+    pub mx: bool,
+    pub mx_provider: String,
+    pub dmarc: Option<String>,
+    pub www_audit: Value,
+}
+
+/// Szukaj frazy w sieci → wyciągnij UNIKALNE domeny z wyników → dla każdej
+/// szybki DNS (MX + DMARC) → krótki audyt WWW. Rate-limit-safe: max 8 domen,
+/// przerwy między żądaniami nie potrzebne przy 8 (DDG throttle zaczyna się
+/// przy seriach 20+).
+pub fn internet_search(phrase: &str) -> (Value, Vec<SearchHit>) {
+    let res = web_search(phrase);
+    let mut seen = BTreeSet::new();
+    let mut hits: Vec<SearchHit> = Vec::new();
+    let skip = ["duckduckgo", "wikipedia.org", "youtube.", "facebook.", "linkedin.",
+                "instagram.", "google.", "twitter.", "x.com", "tiktok.", "pinterest."];
+    if let Some(arr) = res["results"].as_array() {
+        for r in arr {
+            if hits.len() >= 8 { break; }
+            let url = r["url"].as_str().unwrap_or("");
+            let Some(dom) = host_of(url) else { continue };
+            if skip.iter().any(|s| dom.contains(s)) { continue; }
+            if !seen.insert(dom.clone()) { continue; }
+            let (mx, mxp) = mx_provider(&dom);
+            let dmarc = first_txt(&format!("_dmarc.{dom}"));
+            let audit = www_audit(&dom);
+            hits.push(SearchHit {
+                domain: dom.clone(),
+                title: r["title"].as_str().unwrap_or("").to_string(),
+                url: url.to_string(),
+                mx, mx_provider: mxp, dmarc,
+                www_audit: audit,
+            });
+        }
+    }
+    (res, hits)
+}
+
+/// Pierwszy rekord TXT danego klienta (dla DMARC).
+fn first_txt(name: &str) -> Option<String> {
+    dns_q(name, 16)
+        .into_iter()
+        .find_map(|r| match r { Record::Txt(s) => Some(s), _ => None })
+}
+
+/// Czy domena ma MX i kto jest dostawcą poczty (po NS hostname'a MX).
+pub fn mx_provider(dom: &str) -> (bool, String) {
+    let mxs = dns_q(dom, 15);
+    if mxs.is_empty() {
+        return (false, String::new());
+    }
+    let mut provider = String::new();
+    for r in mxs.iter() {
+        if let Record::Mx { exchange, .. } = r {
+            let ex = exchange.to_lowercase();
+            let known = [
+                ("google", "Google Workspace"), ("googlemail", "Google Workspace"),
+                ("outlook", "Microsoft 365"), ("protection.outlook", "Microsoft 365"),
+                ("mailgun", "Mailgun"), ("sendgrid", "SendGrid"),
+                ("zoho", "Zoho"), ("yandex", "Yandex"),
+                ("seznam", "Seznam"), ("ovh", "OVH"),
+                ("home.pl", "home.pl"), ("nazwa.pl", "nazwa.pl"),
+                ("domeny", "nazwa.pl"), ("sekundo", "Sekundo"),
+                ("mikrus", "Mikrus"), ("server", "self-host"),
+                ("poczta", "self-host"), ("mail", "self-host"),
+            ];
+            for (k, v) in known {
+                if ex.contains(k) {
+                    provider = v.to_string();
+                    break;
+                }
+            }
+            if provider.is_empty() {
+                provider = ex.trim_end_matches('.').to_string();
+            }
+            break;
+        }
+    }
+    (true, provider)
+}
+
+/// Szybki audyt bezpieczeństwa/postawy WWW: dostępność + HTTPS + nagłówki
+/// (HSTS, X-Frame-Options, CSP, server banner). GET tylko nagłówka →HEAD
+/// gdzie się da; wysyłamy GET i patrzymy na nagłówki (male body read).
+pub fn www_audit(dom: &str) -> Value {
+    let url = format!("https://{dom}");
+    let resp = ureq::get(&url)
+        .timeout(TIMEOUT)
+        .set("User-Agent", UA)
+        .call();
+    match resp {
+        Ok(r) => {
+            let hdrs = {
+                let names = ["strict-transport-security", "x-frame-options",
+                             "content-security-policy", "server", "x-powered-by"];
+                names.iter()
+                    .filter_map(|n| r.header(n).map(|v| format!("{n}: {v}")))
+                    .collect::<Vec<_>>()
+            };
+            json!({
+                "ok": true, "url": url, "status": r.status(),
+                "https": true,
+                "hsts": hdrs.iter().any(|h| h.starts_with("strict-transport-security")),
+                "xfo": hdrs.iter().any(|h| h.starts_with("x-frame-options")),
+                "csp": hdrs.iter().any(|h| h.starts_with("content-security-policy")),
+                "headers": hdrs,
+            })
+        }
+        Err(ureq::Error::Status(code, _)) => json!({
+            "ok": true, "url": url, "status": code, "https": true,
+            "hsts": false, "xfo": false, "csp": false, "headers": [],
+        }),
+        Err(_) => {
+            // https padł → spróbuj http (sygnał: brak TLS = amunicja)
+            match http_get(&format!("http://{dom}")) {
+                Ok(_) => json!({
+                    "ok": true, "url": format!("http://{dom}"), "status": 200,
+                    "https": false, "hsts": false, "xfo": false, "csp": false,
+                    "headers": [], "note": "brak HTTPS — ruch jawny",
+                }),
+                Err(_) => json!({ "ok": false, "note": "host nie odpowiada" }),
+            }
+        }
+    }
+}
+
 // ─────────────────────────────────────────────── tests ───────────────────
 
 #[cfg(test)]

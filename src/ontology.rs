@@ -131,6 +131,29 @@ impl Ontology {
         );
     }
 
+    /// OSINT-first: podmiot dla domeny — istnieje → id; nie ma → tworzy encję
+    /// (nazwa z audytu WWW lub sama domena, sektor 'websearch'). Idempotentny.
+    pub fn ensure_podmiot_by_domena(&self, domena: &str, nazwa: Option<&str>) -> SqlResult<i64> {
+        if let Some(id) = self.podmiot_id_by_domena(domena) {
+            return Ok(id);
+        }
+        let nazwa = nazwa
+            .filter(|s| !s.trim().is_empty())
+            .map(|s| s.trim().to_string())
+            .unwrap_or_else(|| domena.to_string());
+        let id = self.upsert_podmiot(&NewPodmiot {
+            nazwa,
+            nip: String::new(),
+            sektor: "websearch".into(),
+            wojewodztwo: String::new(),
+            miasto: String::new(),
+            pop: 0,
+            zrodla: "internet".into(),
+        })?;
+        self.upsert_domena(domena, false, id)?;
+        Ok(id)
+    }
+
     /// Upsert domeny bez wiązania z podmiotem (discovery znalezione, nie klasyfikowane).
     /// Zwraca id; podmiot_id = 0 oznacza „bez ownera” w kontekście discovery.
     pub fn upsert_domena_free(&self, nazwa: &str, mx: bool) -> SqlResult<i64> {

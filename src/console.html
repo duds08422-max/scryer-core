@@ -345,7 +345,7 @@
       <path d="M16 2v6M16 24v6M2 16h6M24 16h6" stroke="#35e0a1" stroke-width="1.2" opacity=".5"/>
     </svg>
     <span class="word">SCR<em>Y</em>ER</span>
-    <span class="ver">v0.9.0</span>
+    <span class="ver">v0.10.0</span>
   </div>
   <div id="stats"></div>
   <div class="topright">
@@ -367,13 +367,14 @@
   <div class="view on" id="view-szukaj" style="flex-direction:column">
     <div style="display:flex;gap:10px;padding:22px 16px 10px;align-items:center;border-bottom:1px solid var(--line)">
       <span style="color:var(--acc);font-size:11px;letter-spacing:2px">SZUKAJ</span>
-      <input id="s-in" class="inp" style="flex:1;font-size:13px;padding:9px 12px" placeholder="np. 'wodociągi bez kontaktu' · 'hot bez dmarc' · 'recon kghm.com' · 'szpitale powyżej 100000'" autocomplete="off" spellcheck="false">
+      <input id="s-in" class="inp" style="flex:1;font-size:13px;padding:9px 12px" placeholder="cokolwiek: 'wodociągi bez kontaktu' · 'internet spółka wodna koszalin' · 'recon kghm.com'" autocomplete="off" spellcheck="false">
+      <button id="s-net" class="gbtn" title="wymuś OSINT internetowy (z pominięciem lokalnej bazy)">◉ net: auto</button>
       <button id="s-run" class="btn" style="color:var(--acc);border-color:rgba(53,224,161,.35);background:var(--acc2)">szukaj ⏎</button>
     </div>
     <div id="s-said" style="display:none;padding:8px 16px;font-size:11px;color:var(--tx2);border-bottom:1px solid var(--line)"></div>
     <div id="s-out" style="flex:1;overflow:auto"></div>
     <div style="padding:6px 16px;border-top:1px solid var(--line);color:var(--tx3);font-size:9.5px;letter-spacing:.5px">
-      silnik: scryer-intel v1 (autorski, deterministyczny, offline) · baza w tle = fallback/demo — szukaj czegokolwiek, recon załatwi resztę
+      silnik: scryer-intel v1 (autorski, deterministyczny, offline) · <b style="color:var(--cy)">OSINT-FIRST:</b> frazy lecą do internetu, wyniki cache'ują się w ontologii i grafie
     </div>
   </div>
   <div id="list-pane">
@@ -838,7 +839,8 @@ async function runQuery(q) {
   } catch (e) { out.innerHTML = `<div class="err">✗ ${esc(e.message)}</div>`; }
 }
 
-/* ---------------- SZUKAJ (search-first, AI routing) ---------------- */
+/* ---------------- SZUKAJ (OSINT-first + hybryda) ---------------- */
+let netMode = "auto"; // auto | internet | local
 async function runSzukaj(q) {
   const out = $("#s-out"), said = $("#s-said");
   out.innerHTML = '<div class="empty">szukam…</div>';
@@ -846,26 +848,58 @@ async function runSzukaj(q) {
   try {
     const d = await api("/api/ai", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ q }),
+      body: JSON.stringify({ q, mode: netMode === "auto" ? null : netMode }),
     });
     said.style.display = "block";
-    said.innerHTML = d.mode === "external"
-      ? `<span style="color:var(--cy)">◉ RECON</span> ${esc(d.said)} — zbieram DNS/RDAP/crt.sh/WWW/search (10-30s)…`
-      : `<span style="color:var(--acc)">▸ ROZUMIEM</span> ${esc(d.said)} <span style="color:var(--tx3)">· ${d.count} wyników</span>`;
+    said.textContent = "";
     if (d.mode === "external") {
+      said.innerHTML = `<span style="color:var(--cy)">◉ RECON</span> ${esc(d.said)} — zbieram DNS/RDAP/crt.sh/WWW/search…`;
       renderDiscovery(d.report);
       loadStats();
+    } else if (d.mode === "hybrid") {
+      said.innerHTML = `<span style="color:var(--acc)">▸ ${esc(d.said)}</span>`;
+      renderSzukajInternet(d.internet, true);
+      loadStats();
+    } else if (d.mode === "internet") {
+      said.innerHTML = `<span style="color:var(--cy)">◉ ${esc(d.said)}</span>`;
+      renderSzukajInternet(d, false);
+      loadStats();
     } else {
+      said.innerHTML = `<span style="color:var(--acc)">▸ ROZUMIEM</span> ${esc(d.said)} <span style="color:var(--tx3)">· ${d.count} wyników</span>`;
       renderSzukajLocal(d);
     }
+    if (d.said) said.insertAdjacentHTML("beforeend", ``);
   } catch (e) {
     out.innerHTML = `<div class="empty" style="color:var(--bad)">✗ ${esc(e.message)}</div>`;
   }
 }
+function renderSzukajInternet(d, afterLocal) {
+  const out = $("#s-out");
+  const head = afterLocal ? '<div style="padding:10px 16px 4px;color:var(--cy);font-size:9.5px;letter-spacing:2px;text-transform:uppercase">◉ internet (OSINT, cache → ontologia)</div>' : "";
+  if (!d.items?.length) {
+    out.innerHTML = head + '<div class="empty">internet nic sensownego nie zwrócił — przeformułuj frazę</div>';
+    return;
+  }
+  out.innerHTML = head + d.items.map(h => {
+    const mx = h.mx ? `<span class="pill p-ok">mx: ${esc(h.mx_provider || "tak")}</span>` : '<span class="pill p-bad">brak MX</span>';
+    const dm = h.dmarc ? '<span class="pill p-ok">dmarc</span>' : '<span class="pill p-bad">bez DMARC</span>';
+    const tls = h.https === false ? '<span class="pill p-bad">brak HTTPS</span>' : (h.hsts ? '<span class="pill p-ok">hsts</span>' : '');
+    const csp = h.csp ? '' : '<span class="pill p-dim">bez CSP</span>';
+    return `<div class="surface-row" style="flex-wrap:wrap;cursor:default">
+      <b>${esc(h.title || h.domain)}</b>
+      <span class="dom">${esc(h.domain)}</span>
+      ${mx}${dm}${tls}${csp}
+      <span style="margin-left:auto;display:flex;gap:6px">
+        <button class="gbtn" data-deep="${esc(h.domain)}">pogłęb ▸</button>
+        <button class="gbtn" data-goto="${esc(h.domain)}">GRAF ◈</button>
+      </span>
+    </div>`;
+  }).join("");
+}
 function renderSzukajLocal(d) {
   const out = $("#s-out");
   if (!d.items?.length) {
-    out.innerHTML = '<div class="empty">brak wyników w bazie — to NIE znaczy że nie ma: użyj recon (np. "recon " + nazwa) albo rozluźnij kryteria</div>';
+    out.innerHTML = '<div class="empty">brak wyników w bazie — fraza lecła też do internetu (hybryda) albo użyj „net: internet”</div>';
     return;
   }
   if (d.kind === "podmioty") {
@@ -892,10 +926,34 @@ function renderSzukajLocal(d) {
 }
 $("#s-run").onclick = () => { const q = $("#s-in").value.trim(); if (q) runSzukaj(q); };
 $("#s-in").addEventListener("keydown", (ev) => { if (ev.key === "Enter") $("#s-run").click(); });
+$("#s-net").onclick = () => {
+  netMode = netMode === "auto" ? "internet" : netMode === "internet" ? "local" : "auto";
+  const lbl = { auto: "◉ net: auto", internet: "◉ net: WYMIUSZ", local: "◉ net: off" }[netMode];
+  $("#s-net").textContent = lbl;
+  $("#s-net").style.color = netMode === "internet" ? "var(--cy)" : "";
+};
 $("#s-out").addEventListener("click", (ev) => {
   const tr = ev.target.closest("tr.row");
-  if (tr) showPodmiot(Number(tr.dataset.id));
+  if (tr) { showPodmiot(Number(tr.dataset.id)); return; }
+  const deep = ev.target.closest("[data-deep]");
+  if (deep) {
+    document.querySelector('nav button[data-tab="discover"]').click();
+    $("#disc-in").value = deep.dataset.deep;
+    $("#disc-run").click();
+    return;
+  }
+  const go = ev.target.closest("[data-goto]");
+  if (go) gotoGraph(go.dataset.goto);
 });
+// skocz do grafu i wyceluj kamerę w podmiot z domeną dom
+async function gotoGraph(dom) {
+  document.querySelector('nav button[data-tab="graph"]').click();
+  // GRAPH cache może być stary (internet dopiero co wpisał encje) — odśwież
+  GRAPH = await api("/api/graph");
+  renderGraph();
+  const hit = (GRAPH.domeny || []).find(d => d.nazwa === dom);
+  setTimeout(() => { ENGINE?.follow(hit ? "p" + hit.podmiot_id : null); }, 400);
+}
 
 /* ---------------- events ---------------- */
 $$("nav button").forEach(b => b.onclick = () => {

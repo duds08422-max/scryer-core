@@ -463,29 +463,43 @@ struct AiBody {
     /// execute=false → tylko plan ("rozumiem jako"), bez SQL/sieci
     #[serde(default)]
     dry: bool,
+    /// wymuś tryb: "internet" (OSINT-first) — domyślnie hybryda
+    #[serde(default)]
+    mode: Option<String>,
 }
 
 async fn api_ai(State(s): State<S>, Json(body): Json<AiBody>) -> ApiResult {
     use crate::intel::{self, Target};
 
     let plan = intel::plan(&body.q);
-    if plan.target != Target::External && plan.preds.is_empty() {
+    // "internet <frazа>" = jawne wymuszenie OSINT (jak przycisk net)
+    let foldq = crate::ontology::fold_str(&body.q);
+    let strip_prefix = foldq.starts_with("internet ");
+    let search_phrase: &str = if strip_prefix { body.q["internet ".len()..].trim() } else { body.q.as_str() };
+    let force_internet = body.mode.as_deref() == Some("internet") || strip_prefix;
+    let is_external = plan.target == Target::External;
+    // HYBRID: fraza bez predykatorów (albo wymuszona) → internet;
+    // fraza z predykatorami → LOKAL + INTERNET równolegle
+    let local_worth = !is_external && !plan.preds.is_empty();
+    let internet_worth = !local_worth || plan.preds.iter().any(|p| matches!(p, crate::intel::Pred::Text(_)));
+
+    if !is_external && !local_worth && !force_internet && !internet_worth {
         return Err(AppError(
             StatusCode::BAD_REQUEST,
-            "nie rozumiem zapytania — spróbuj: 'wodociągi bez kontaktu', 'hot bez dmarc', 'recon <domena>'".to_string(),
+            "nie rozumiem zapytania — spróbuj: 'wodociągi bez kontaktu', 'hot bez dmarc', 'recon <domena>', 'internet <firma>'".to_string(),
         ));
     }
 
     if body.dry {
         return Ok(Json(json!({
-            "mode": if plan.target == Target::External { "external" } else { "local" },
+            "mode": if is_external { "external" } else if local_worth { "hybrid" } else { "internet" },
             "said": plan.said,
             "conf": plan.conf,
             "dry": true,
         })));
     }
 
-    if plan.target == Target::External {
+    if is_external {
         // localization + recon poza async-ctx (sieć w spawn_blocking, osobny conn)
         let q = plan.external_q.clone().unwrap_or_default();
         let s2 = s.clone();
@@ -514,13 +528,54 @@ async fn api_ai(State(s): State<S>, Json(body): Json<AiBody>) -> ApiResult {
         })));
     }
 
-    // LOCAL: SQL pod Mutexem — bez sieci, natychmiast
-    let out = {
-        let onto = lock_onto(&s);
-        intel::execute(&onto, &plan).map_err(err500)?
+    // ── HYBRID: lokal natychmiast, internet równolegle (spawn_blocking) ──
+    let local_res = if local_worth {
+        let out = {
+            let onto = lock_onto(&s);
+            intel::execute(&onto, &plan).map_err(err500)?
+        };
+        lock_onto(&s).log_audyt("ai", "local", &format!("{} → {}", body.q, out["said"].as_str().unwrap_or("")));
+        Some(out)
+    } else {
+        None
     };
-    lock_onto(&s).log_audyt("ai", "local", &format!("{} → {}", body.q, out["said"].as_str().unwrap_or("")));
-    Ok(Json(out))
+
+    let internet_res = if internet_worth || force_internet {
+        let phrase = plan.external_q.clone().unwrap_or_else(|| search_phrase.to_string());
+        let db = DB_PATH
+            .get()
+            .cloned()
+            .ok_or_else(|| AppError(StatusCode::INTERNAL_SERVER_ERROR, "brak ścieżki DB".into()))?;
+        // OSINT w tle — osobne połączenie, nie trzymamy Mutexa podczas sieci
+        let int_res = tokio::task::spawn_blocking(move || -> Result<serde_json::Value, String> {
+            let onto = crate::ontology::Ontology::open(&db).map_err(|e| e.to_string())?;
+            onto.register_sql_functions();
+            crate::intel::internet_search(&onto, &phrase)
+        })
+        .await
+        .map_err(|e| AppError(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .map_err(err500)?;
+        lock_onto(&s).log_audyt("ai", "internet", &format!("{} → {} wyników", body.q, int_res["count"].as_i64().unwrap_or(0)));
+        Some(int_res)
+    } else {
+        None
+    };
+
+    match (local_res, internet_res) {
+        (Some(l), Some(i)) => Ok(Json(json!({
+            "mode": "hybrid",
+            "said": format!("{} · {}", l["said"].as_str().unwrap_or(""), i["said"].as_str().unwrap_or("")),
+            "local": l,
+            "internet": i,
+            "count": l["count"].as_i64().unwrap_or(0) + i["count"].as_i64().unwrap_or(0),
+        }))),
+        (Some(l), None) => Ok(Json(l)),
+        (None, Some(i)) => Ok(Json(i)),
+        (None, None) => Err(AppError(
+            StatusCode::BAD_REQUEST,
+            "nie rozumiem zapytania — spróbuj: 'wodociągi bez kontaktu', 'internet <firma>', 'recon <domena>'".to_string(),
+        )),
+    }
 }
 
 /// Jeśli celem jest podmiot z bazy, użyj jego domeny zamiast zgadywania DDG.

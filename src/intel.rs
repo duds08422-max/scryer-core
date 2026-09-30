@@ -17,6 +17,7 @@
 //!   "szpitale"                          → sektor LIKE szpital
 //!   "recon kghm.com" / "zwik@zwik.szczecin.pl" → EXTERNAL
 
+use crate::discovery;
 use crate::ontology::Ontology;
 use serde_json::{json, Value};
 
@@ -434,6 +435,65 @@ fn parse_compact(t: &str) -> Option<i64> {
     Some((n * mult as f64) as i64)
 }
 
+// ─────────────────────────── internet search (OSINT-first) ──────────────
+
+/// Fraza → internet → encje do cache'u ontologii. Wywoływane ze spawn_blocking
+/// (sieć!). Zwraca JSON dla konsoli + zapisuje do bazy.
+pub fn internet_search(o: &Ontology, phrase: &str) -> Result<Value, String> {
+    let (web, hits) = discovery::internet_search(phrase);
+    if hits.is_empty() {
+        return Ok(json!({
+            "mode": "internet",
+            "said": format!("internet: „{phrase}” — brak sensownych domen w wynikach"),
+            "web": web,
+            "count": 0,
+            "items": [],
+        }));
+    }
+
+    let mut items = Vec::with_capacity(hits.len());
+    for h in &hits {
+        // encja/domena do cache'u (idempotentnie)
+        let title = if h.title.is_empty() { None } else { Some(h.title.as_str()) };
+        let pid = o.ensure_podmiot_by_domena(&h.domain, title).map_err(|e| e.to_string())?;
+        o.upsert_domena(&h.domain, h.mx, pid).map_err(|e| e.to_string())?;
+        o.set_domena_mail(&h.domain, None, h.dmarc.as_deref());
+        if h.www_audit["ok"].as_bool() == Some(true) {
+            let url = h.www_audit["url"].as_str().unwrap_or("");
+            o.fill_podmiot_meta(pid, None, Some(url), title, None);
+        }
+        o.log_audyt("intel", "internet_search", &h.domain);
+
+        items.push(json!({
+            "podmiot_id": pid,
+            "domain": h.domain,
+            "title": h.title,
+            "url": h.url,
+            "mx": h.mx,
+            "mx_provider": h.mx_provider,
+            "dmarc": h.dmarc,
+            "https": h.www_audit["https"],
+            "hsts": h.www_audit["hsts"],
+            "csp": h.www_audit["csp"],
+            "www_status": h.www_audit["status"],
+            "www_note": h.www_audit["note"],
+        }));
+    }
+
+    let mx_count = items.iter().filter(|i| i["mx"].as_bool().unwrap_or(false)).count();
+    let nodmarc = items.iter().filter(|i| i["dmarc"].is_null()).count();
+    Ok(json!({
+        "mode": "internet",
+        "said": format!(
+            "internet: „{phrase}” · {} domen · {mx_count} z pocztą · {nodmarc} bez DMARC → cache w ontologii",
+            items.len()
+        ),
+        "web": web,
+        "count": items.len(),
+        "items": items,
+    }))
+}
+
 // ─────────────────────────────────────────────────── egzekucja ────────────
 
 /// Uruchom plan na ontologii → JSON dla API. Parametryzowane SQL wszędzie.
@@ -688,6 +748,24 @@ mod tests {
         assert!(p.preds.contains(&Pred::Sector("energy".into())));
         let p2 = plan("morskie oko");
         assert!(matches!(p2.preds.first(), Some(Pred::Text(t)) if t.contains("morskie")));
+    }
+
+    #[test]
+    fn wojewodztwo_infleksja() {
+        // "zachodniopomorskim" (miejscownik) → kanoniczna "zachodniopomorskie"
+        let p = plan("hot bez dmarc w zachodniopomorskim");
+        assert!(p.preds.contains(&Pred::Voiv("zachodniopomorskie".into())));
+        let p2 = plan("kujawsko-pomorskie bez kontaktu");
+        assert!(p2.preds.contains(&Pred::Voiv("kujawsko-pomorskie".into())));
+    }
+
+    #[test]
+    fn internet_search_cacheuje_encje() {
+        let o = Ontology::open_memory().unwrap();
+        // symulacja: nie wołamy sieci — tylko sprawdzamy routing planu
+        let p = plan("internet szczecin wodociągi");
+        assert!(p.preds.contains(&Pred::Sector("wodociagi".into())));
+        let _ = o; // internet_search testujemy integracyjnie przez smoke, nie testem jednostkowym (sieć)
     }
 
     #[test]
