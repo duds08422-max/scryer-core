@@ -345,7 +345,7 @@
       <path d="M16 2v6M16 24v6M2 16h6M24 16h6" stroke="#35e0a1" stroke-width="1.2" opacity=".5"/>
     </svg>
     <span class="word">SCR<em>Y</em>ER</span>
-    <span class="ver">v0.10.0</span>
+    <span class="ver">v0.10.1</span>
   </div>
   <div id="stats"></div>
   <div class="topright">
@@ -685,10 +685,24 @@ function renderGraph() {
   const container = $("#graph");
   gdiag(`węzły: ${n.length}, krawędzie: ${e.length}`);
   if (!n.length) {
-    container.innerHTML = '<div class="empty" style="position:absolute;inset:0">brak węzłów — rozluźnij filtry</div>';
+    // BUGFIX: NIE wolno robić innerHTML na kontenerze — kasuje canvasy
+    // silnika (rysował potem w próżnię = graf pusty na zawsze).
+    // Pusty stan to NORMALNY stan świeżej bazy — overlay zamiast destrukcji.
+    let ov = document.getElementById("g-empty");
+    if (!ov) {
+      ov = document.createElement("div");
+      ov.id = "g-empty"; ov.className = "empty";
+      ov.style.cssText = "position:absolute;inset:0;z-index:3;pointer-events:none";
+      container.appendChild(ov);
+    }
+    ov.textContent = "0 węzłów — pusta baza to stan normalny: SZUKAJ (internet) zbuduje graf";
     $("#g-count").textContent = "0 węzłów";
     return;
   }
+  // węzły są → zdejmij overlay pustego stanu jeśli był
+  document.getElementById("g-empty")?.remove();
+  // jeśli canvasy silnika wyleciały z DOM (stara lipsa) — odmów przyjęcia
+  if (ENGINE && !ENGINE.alive) { ENGINE.destroy(); ENGINE = null; gdiag("silnik odtworzony (canvasy utracone)"); }
   // kontener spłaszczony → silnik sam poczeka na ResizeObserver; ale nie buduj
   // ślepo przy 0px — jeden retry dla wyrobienia się layoutu zakładki
   if (container.clientWidth < 50 || container.clientHeight < 50) {
@@ -868,7 +882,6 @@ async function runSzukaj(q) {
       said.innerHTML = `<span style="color:var(--acc)">▸ ROZUMIEM</span> ${esc(d.said)} <span style="color:var(--tx3)">· ${d.count} wyników</span>`;
       renderSzukajLocal(d);
     }
-    if (d.said) said.insertAdjacentHTML("beforeend", ``);
   } catch (e) {
     out.innerHTML = `<div class="empty" style="color:var(--bad)">✗ ${esc(e.message)}</div>`;
   }
@@ -947,12 +960,12 @@ $("#s-out").addEventListener("click", (ev) => {
 });
 // skocz do grafu i wyceluj kamerę w podmiot z domeną dom
 async function gotoGraph(dom) {
+  // najpierw świeże dane do cache (internet dopiero co wpisał encje),
+  // potem tab-switch: buildGraph zobaczy GRAPH i zrobi JEDEN render bez fetcha
+  try { GRAPH = await api("/api/graph"); } catch { return; }
   document.querySelector('nav button[data-tab="graph"]').click();
-  // GRAPH cache może być stary (internet dopiero co wpisał encje) — odśwież
-  GRAPH = await api("/api/graph");
-  renderGraph();
   const hit = (GRAPH.domeny || []).find(d => d.nazwa === dom);
-  setTimeout(() => { ENGINE?.follow(hit ? "p" + hit.podmiot_id : null); }, 400);
+  if (hit) setTimeout(() => ENGINE?.follow("p" + hit.podmiot_id), 450);
 }
 
 /* ---------------- events ---------------- */

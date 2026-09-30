@@ -283,9 +283,12 @@ fn cmd_discover(q: &str) {
 
 fn cmd_serve() {
     let db = db_path();
-    if !db.exists() {
-        eprintln!("baza {} nie istnieje — najpierw `scryer-core import ...`", db.display());
-        std::process::exit(2);
+    // pusta baza jest OK — OSINT-first zbuduje ją z internetu (schemat tworzy
+    // Ontology::open); stary wymóg "najpierw import" nie obowiązuje
+    if let Some(dir) = db.parent() {
+        if !dir.as_os_str().is_empty() && !dir.exists() {
+            let _ = std::fs::create_dir_all(dir);
+        }
     }
     let host = std::env::var("SCRYER_HOST").unwrap_or_else(|_| "127.0.0.1".into());
     let port: u16 = std::env::var("SCRYER_PORT")

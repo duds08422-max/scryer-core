@@ -178,9 +178,11 @@ function GraphEngine(container, opts) {
     nodeArr = new Float32Array(nodes.length * 7);
     edgeArr = new Float32Array(edges.length * 12);
     alpha = 1.0;
-    hovered = -1; selected = -1;
+    hovered = -1; selected = -1; followIdx = -1;
     if (opts.onCounts) opts.onCounts(nodes.length, edges.length);
-    fitView(false);
+    if (nodes.length) fitView(false);
+    // pusta baza: zero węzłów = zero energii = pętla by nie wstała;
+    // pierwsze setData z danymi MUSI obudzić pętlę (wake() bezwarunkowo)
     wake();
     DIAG(`dane: ${nodes.length} węzłów, ${edges.length} krawędzi`);
   }
@@ -664,6 +666,10 @@ function GraphEngine(container, opts) {
   return {
     setData,
     fitView: (animated) => { followIdx = -1; fitView(animated !== false); },
+    // czy canvasy silnika nadal siedzą w DOM (stary bug: innerHTML je kasował)
+    get alive() {
+      return glCanvas.isConnected && labelCanvas.isConnected;
+    },
     // kamera śledzi węzeł (id z danych, np. "p123") aż do interakcji użytkownika
     follow(id) {
       followIdx = id !== null && byId.has(id) ? byId.get(id) : -1;
