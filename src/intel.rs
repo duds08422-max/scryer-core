@@ -65,8 +65,8 @@ pub struct Plan {
     pub preds: Vec<Pred>,
     pub external_q: Option<String>,
     pub limit: usize,
-    pub said: String,     // "rozumiem jako"
-    pub conf: f64,        // 0..1 — ile predykatorów trafiło (naiwna pewność)
+    pub said: String, // "rozumiem jako"
+    pub conf: f64,    // 0..1 — ile predykatorów trafiło (naiwna pewność)
 }
 
 // ──────────────────────────────────────────────────── leksykon ────────────
@@ -75,10 +75,22 @@ pub struct Plan {
 fn fold(s: &str) -> String {
     s.chars()
         .flat_map(|c| match c {
-            'ą' => vec!['a'], 'ć' => vec!['c'], 'ę' => vec!['e'], 'ł' => vec!['l'],
-            'ń' => vec!['n'], 'ó' => vec!['o'], 'ś' => vec!['s'], 'ź' | 'ż' => vec!['z'],
-            'Ą' => vec!['a'], 'Ć' => vec!['c'], 'Ę' => vec!['e'], 'Ł' => vec!['l'],
-            'Ń' => vec!['n'], 'Ó' => vec!['o'], 'Ś' => vec!['s'], 'Ź' | 'Ż' => vec!['z'],
+            'ą' => vec!['a'],
+            'ć' => vec!['c'],
+            'ę' => vec!['e'],
+            'ł' => vec!['l'],
+            'ń' => vec!['n'],
+            'ó' => vec!['o'],
+            'ś' => vec!['s'],
+            'ź' | 'ż' => vec!['z'],
+            'Ą' => vec!['a'],
+            'Ć' => vec!['c'],
+            'Ę' => vec!['e'],
+            'Ł' => vec!['l'],
+            'Ń' => vec!['n'],
+            'Ó' => vec!['o'],
+            'Ś' => vec!['s'],
+            'Ź' | 'Ż' => vec!['z'],
             c => c.to_lowercase().collect(),
         })
         .collect()
@@ -159,7 +171,14 @@ fn external_intent(raw: &str) -> Option<String> {
     let lower = fold(q);
 
     // czasowniki recon (PL/EN) — "sprawdź X", "recon X", "osint X"
-    for v in ["recon ", "osint ", "sprawdz ", "sprawdź ", "zrekonuj ", "rozbierz "] {
+    for v in [
+        "recon ",
+        "osint ",
+        "sprawdz ",
+        "sprawdź ",
+        "zrekonuj ",
+        "rozbierz ",
+    ] {
         if let Some(rest) = lower.strip_prefix(v) {
             // wróć do oryginalnej wielkości liter — domena nieistotna, ale fraza tak
             let idx = lower.find(rest).unwrap_or(0);
@@ -262,8 +281,39 @@ pub fn plan(raw: &str) -> Plan {
     // ── liczby: "powyżej 100000", ">50k", "ponad 1 mln", "mniej niż 20000"
     let mut nums: Vec<(bool, i64)> = Vec::new(); // (is_min, value)
     for (m, is_min) in [
-        (find_num_after(&q, &["powyzej", "powyżej", "ponad", "wieksze niz", "większe niż", "wiecej niz", "więcej niż", "min", ">"]), true),
-        (find_num_after(&q, &["mniej niz", "mniej niż", "ponizej", "poniżej", "mniejsze niz", "mniejsze niż", "max", "<"]), false),
+        (
+            find_num_after(
+                &q,
+                &[
+                    "powyzej",
+                    "powyżej",
+                    "ponad",
+                    "wieksze niz",
+                    "większe niż",
+                    "wiecej niz",
+                    "więcej niż",
+                    "min",
+                    ">",
+                ],
+            ),
+            true,
+        ),
+        (
+            find_num_after(
+                &q,
+                &[
+                    "mniej niz",
+                    "mniej niż",
+                    "ponizej",
+                    "poniżej",
+                    "mniejsze niz",
+                    "mniejsze niż",
+                    "max",
+                    "<",
+                ],
+            ),
+            false,
+        ),
     ] {
         if let Some(v) = m {
             nums.push((is_min, v));
@@ -315,7 +365,15 @@ pub fn plan(raw: &str) -> Plan {
 
     // ── miasto: "w szczecinie" / "miasto X" — po województwach, bo "w X" bywa
     //    województwem; szukamy inflektywu: "w <miescie>"
-    for m in ["w szczecinie", "w krakowie", "w warszawie", "w poznaniu", "we wroclawiu", "w gdansku", "w lublinie"] {
+    for m in [
+        "w szczecinie",
+        "w krakowie",
+        "w warszawie",
+        "w poznaniu",
+        "we wroclawiu",
+        "w gdansku",
+        "w lublinie",
+    ] {
         if q.contains(m) {
             let city = city_from_phrase(m);
             preds.push(Pred::City(city.to_string()));
@@ -326,8 +384,38 @@ pub fn plan(raw: &str) -> Plan {
 
     // ── reszta: co nie pasuje do niczego → fraza tekstowa
     if preds.is_empty() && target == Target::Podmioty {
-        let stop = ["podmiot", "podmioty", "pokaz", "wyswietl", "wyświetl", "znajdz",
-            "znajdź", "szukaj", "lista", "kto", "co", "gdzie", "jakie", "jacy", "give", "show", "find", "me", "the", "a", "i", "w", "z", "na", "do", "od", "dla", "bez", "oraz", "i"];
+        let stop = [
+            "podmiot",
+            "podmioty",
+            "pokaz",
+            "wyswietl",
+            "wyświetl",
+            "znajdz",
+            "znajdź",
+            "szukaj",
+            "lista",
+            "kto",
+            "co",
+            "gdzie",
+            "jakie",
+            "jacy",
+            "give",
+            "show",
+            "find",
+            "me",
+            "the",
+            "a",
+            "i",
+            "w",
+            "z",
+            "na",
+            "do",
+            "od",
+            "dla",
+            "bez",
+            "oraz",
+            "i",
+        ];
         let words: Vec<&str> = q
             .split_whitespace()
             .filter(|w| w.len() > 2 && !stop.contains(w))
@@ -353,7 +441,11 @@ pub fn plan(raw: &str) -> Plan {
         preds,
         external_q: None,
         limit,
-        said: if said.is_empty() { "wszystkie podmioty".into() } else { said.join(" · ") },
+        said: if said.is_empty() {
+            "wszystkie podmioty".into()
+        } else {
+            said.join(" · ")
+        },
         conf,
     }
 }
@@ -361,7 +453,9 @@ pub fn plan(raw: &str) -> Plan {
 fn city_from_phrase(m: &str) -> &str {
     let city = m.rsplit(' ').next().unwrap_or(m);
     // zwróć rdzeń: "szczecinie" → "szczecin"
-    city.trim_end_matches("ie").trim_end_matches('u').trim_end_matches('k')
+    city.trim_end_matches("ie")
+        .trim_end_matches('u')
+        .trim_end_matches('k')
 }
 
 /// sprawdź czy fraza zawiera słowo w granicach (spacje/przecinki/myślniki)
@@ -431,7 +525,11 @@ fn parse_compact(t: &str) -> Option<i64> {
     } else {
         (&t[..], 1i64)
     };
-    let n: f64 = if let Ok(n) = num.replace(',', ".").parse() { n } else { return None };
+    let n: f64 = if let Ok(n) = num.replace(',', ".").parse() {
+        n
+    } else {
+        return None;
+    };
     Some((n * mult as f64) as i64)
 }
 
@@ -454,9 +552,16 @@ pub fn internet_search(o: &Ontology, phrase: &str) -> Result<Value, String> {
     let mut items = Vec::with_capacity(hits.len());
     for h in &hits {
         // encja/domena do cache'u (idempotentnie)
-        let title = if h.title.is_empty() { None } else { Some(h.title.as_str()) };
-        let pid = o.ensure_podmiot_by_domena(&h.domain, title).map_err(|e| e.to_string())?;
-        o.upsert_domena(&h.domain, h.mx, pid).map_err(|e| e.to_string())?;
+        let title = if h.title.is_empty() {
+            None
+        } else {
+            Some(h.title.as_str())
+        };
+        let pid = o
+            .ensure_podmiot_by_domena(&h.domain, title)
+            .map_err(|e| e.to_string())?;
+        o.upsert_domena(&h.domain, h.mx, pid)
+            .map_err(|e| e.to_string())?;
         o.set_domena_mail(&h.domain, None, h.dmarc.as_deref());
         if h.www_audit["ok"].as_bool() == Some(true) {
             let url = h.www_audit["url"].as_str().unwrap_or("");
@@ -480,7 +585,10 @@ pub fn internet_search(o: &Ontology, phrase: &str) -> Result<Value, String> {
         }));
     }
 
-    let mx_count = items.iter().filter(|i| i["mx"].as_bool().unwrap_or(false)).count();
+    let mx_count = items
+        .iter()
+        .filter(|i| i["mx"].as_bool().unwrap_or(false))
+        .count();
     let nodmarc = items.iter().filter(|i| i["dmarc"].is_null()).count();
     Ok(json!({
         "mode": "internet",
@@ -526,13 +634,31 @@ fn run_podmioty(o: &Ontology, plan: &Plan) -> Result<Value, String> {
     for pred in &plan.preds {
         match pred {
             Pred::Sector(s) => {
-                sub("COALESCE(p.sektor,'') LIKE ?", SV::Text(fold(s)), &mut conds, &mut vals, &mut p);
+                sub(
+                    "COALESCE(p.sektor,'') LIKE ?",
+                    SV::Text(fold(s)),
+                    &mut conds,
+                    &mut vals,
+                    &mut p,
+                );
             }
             Pred::City(c) => {
-                sub("fold_search(p.miasto, ?)", SV::Text(fold(c)), &mut conds, &mut vals, &mut p);
+                sub(
+                    "fold_search(p.miasto, ?)",
+                    SV::Text(fold(c)),
+                    &mut conds,
+                    &mut vals,
+                    &mut p,
+                );
             }
             Pred::Voiv(v) => {
-                sub("fold_search(COALESCE(p.wojewodztwo,''), ?)", SV::Text(fold(v)), &mut conds, &mut vals, &mut p);
+                sub(
+                    "fold_search(COALESCE(p.wojewodztwo,''), ?)",
+                    SV::Text(fold(v)),
+                    &mut conds,
+                    &mut vals,
+                    &mut p,
+                );
             }
             Pred::Text(t) => {
                 // pełny tekst: nazwa / miasto / NIP / email osób / domena
@@ -561,28 +687,46 @@ fn run_podmioty(o: &Ontology, plan: &Plan) -> Result<Value, String> {
                 vals.push(SV::Integer(*v));
             }
             Pred::HasMail => {
-                conds.push("EXISTS (SELECT 1 FROM domena d WHERE d.podmiot_id = p.id AND d.mx = 1)".into());
+                conds.push(
+                    "EXISTS (SELECT 1 FROM domena d WHERE d.podmiot_id = p.id AND d.mx = 1)".into(),
+                );
             }
             Pred::NoDmarc => {
-                conds.push("EXISTS (SELECT 1 FROM domena d WHERE d.podmiot_id = p.id AND d.mx = 1 \
-                            AND (d.dmarc IS NULL OR d.dmarc = ''))".into());
+                conds.push(
+                    "EXISTS (SELECT 1 FROM domena d WHERE d.podmiot_id = p.id AND d.mx = 1 \
+                            AND (d.dmarc IS NULL OR d.dmarc = ''))"
+                        .into(),
+                );
             }
             Pred::NoSpf => {
-                conds.push("EXISTS (SELECT 1 FROM domena d WHERE d.podmiot_id = p.id AND d.mx = 1 \
-                            AND (d.spf IS NULL OR d.spf = ''))".into());
+                conds.push(
+                    "EXISTS (SELECT 1 FROM domena d WHERE d.podmiot_id = p.id AND d.mx = 1 \
+                            AND (d.spf IS NULL OR d.spf = ''))"
+                        .into(),
+                );
             }
             Pred::Contacted => {
-                conds.push("EXISTS (SELECT 1 FROM interakcja i WHERE i.podmiot_id = p.id \
-                            AND i.typ = 'email_sent')".into());
+                conds.push(
+                    "EXISTS (SELECT 1 FROM interakcja i WHERE i.podmiot_id = p.id \
+                            AND i.typ = 'email_sent')"
+                        .into(),
+                );
             }
             Pred::NotContacted => {
-                conds.push("NOT EXISTS (SELECT 1 FROM interakcja i WHERE i.podmiot_id = p.id \
-                            AND i.typ = 'email_sent')".into());
+                conds.push(
+                    "NOT EXISTS (SELECT 1 FROM interakcja i WHERE i.podmiot_id = p.id \
+                            AND i.typ = 'email_sent')"
+                        .into(),
+                );
             }
         }
     }
 
-    let where_ = if conds.is_empty() { "1=1".to_string() } else { conds.join(" AND ") };
+    let where_ = if conds.is_empty() {
+        "1=1".to_string()
+    } else {
+        conds.join(" AND ")
+    };
     let sql = format!(
         "SELECT p.id, p.nazwa, COALESCE(p.sektor,''), COALESCE(p.miasto,''), COALESCE(p.pop,0), \
                 COALESCE(p.tier_score,0), \

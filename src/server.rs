@@ -8,8 +8,9 @@
 use crate::ontology::Ontology;
 use crate::query;
 use axum::{
-    extract::{Path as AxPath, Query, State},
+    extract::{Path as AxPath, Query, Request, State},
     http::StatusCode,
+    middleware::{self, Next},
     response::{Html, IntoResponse, Response},
     routing::{get, post},
     Json, Router,
@@ -53,11 +54,69 @@ fn lock_onto(s: &S) -> MutexGuard<'_, Ontology> {
     s.onto.lock().unwrap_or_else(|p| p.into_inner())
 }
 
+/// Token auth (opcjonalny): `SCRYER_TOKEN` z env.
+fn auth_token() -> Option<String> {
+    let t = std::env::var("SCRYER_TOKEN").unwrap_or_default();
+    let t = t.trim().to_string();
+    (!t.is_empty()).then_some(t)
+}
+
+/// Bearer-token middleware na /api/*.
+async fn auth_middleware(req: Request, next: Next) -> Response {
+    let path = req.uri().path().to_string();
+    let auth_header = req
+        .headers()
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_string);
+    let expected = auth_token();
+    if !request_authorized(&path, auth_header.as_deref(), expected.as_deref()) {
+        return Response::builder()
+            .status(StatusCode::UNAUTHORIZED)
+            .header("www-authenticate", "Bearer realm=\"scryer\"")
+            .body(axum::body::Body::from(
+                "{\"error\":\"missing/invalid bearer token\"}",
+            ))
+            .unwrap();
+    }
+    next.run(req).await
+}
+
+/// Czysta logika decyzji auth (testowalna bez spawnowania serwera).
+/// `token = None` → auth wyłączona, wszystko przepuszczone.
+/// Chronione są tylko ścieżki pod "/api/" (konsola i assety zostają publiczne).
+fn request_authorized(path: &str, auth_header: Option<&str>, token: Option<&str>) -> bool {
+    let Some(expected) = token else {
+        return true;
+    };
+    if !path.starts_with("/api/") {
+        return true;
+    }
+    let Some(provided) = auth_header.and_then(|h| h.strip_prefix("Bearer ")) else {
+        return false;
+    };
+    constant_time_eq(provided.as_bytes(), expected.as_bytes())
+}
+
+/// Stałoczasowe porównanie bajtów (odporne na timing attacks przy równych
+/// długościach; różnica długości i tak jest jawnie widoczna w nagłówku).
+fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    a.iter()
+        .zip(b.iter())
+        .fold(0u8, |acc, (x, y)| acc | (x ^ y))
+        == 0
+}
+
 pub async fn serve(db: PathBuf, host: &str, port: u16) -> Result<(), String> {
     let onto = Ontology::open(&db).map_err(|e| e.to_string())?;
     onto.register_sql_functions();
     let _ = DB_PATH.set(db.clone());
-    let state = Arc::new(AppState { onto: Mutex::new(onto) });
+    let state = Arc::new(AppState {
+        onto: Mutex::new(onto),
+    });
 
     let app = Router::new()
         .route("/", get(index))
@@ -71,13 +130,24 @@ pub async fn serve(db: PathBuf, host: &str, port: u16) -> Result<(), String> {
         .route("/api/discover", post(api_discover))
         .route("/api/ai", post(api_ai))
         .route("/api/attack-surface", get(api_attack_surface))
-        .with_state(state);
+        .with_state(state)
+        // Auth na /api/* (SCRYER_TOKEN); / i assets zostają publiczne,
+        // by konsola mogła się załadować i poprosić o token.
+        .layer(middleware::from_fn(auth_middleware));
 
     let addr = format!("{host}:{port}");
     let listener = tokio::net::TcpListener::bind(&addr)
         .await
         .map_err(|e| format!("bind {addr}: {e}"))?;
     println!("scryer-core serve: http://{addr}  (db: {})", db.display());
+    println!(
+        "  auth: {}",
+        if auth_token().is_some() {
+            "WŁĄCZONA (SCRYER_TOKEN) — /api/* wymaga Authorization: Bearer"
+        } else {
+            "WYŁĄCZONA — ustaw SCRYER_TOKEN, by chronić API (obowiązkowe przy SCRYER_HOST=0.0.0.0)"
+        }
+    );
     println!("  endpointy: /api/stats /api/podmioty /api/podmiot/:id /api/query /api/tenders /api/graph /api/ai /api/discover /api/attack-surface");
     axum::serve(listener, app).await.map_err(|e| e.to_string())
 }
@@ -101,13 +171,10 @@ async fn api_stats(State(s): State<S>) -> ApiResult {
     let c = onto.conn();
     let cnt = |sql: &str| -> i64 { c.query_row(sql, [], |r| r.get(0)).unwrap_or(0) };
 
-    let contacted: i64 = cnt(
-        "SELECT COUNT(DISTINCT podmiot_id) FROM interakcja
-         WHERE typ='email_sent' AND podmiot_id IS NOT NULL",
-    );
-    let nodmarc: i64 = cnt(
-        "SELECT COUNT(*) FROM domena WHERE mx=1 AND (dmarc IS NULL OR dmarc='')",
-    );
+    let contacted: i64 = cnt("SELECT COUNT(DISTINCT podmiot_id) FROM interakcja
+         WHERE typ='email_sent' AND podmiot_id IS NOT NULL");
+    let nodmarc: i64 =
+        cnt("SELECT COUNT(*) FROM domena WHERE mx=1 AND (dmarc IS NULL OR dmarc='')");
     let hot: i64 = cnt("SELECT COUNT(*) FROM podmiot WHERE tier_score >= 15");
     let warm: i64 = cnt("SELECT COUNT(*) FROM podmiot WHERE tier_score >= 8 AND tier_score < 15");
 
@@ -203,8 +270,10 @@ async fn api_podmioty(State(s): State<S>, Query(q): Query<PodmiotyQ>) -> ApiResu
     let total: i64 = {
         // szybki licznik bez LIMIT/OFFSET do paginacji
         let count_sql = format!("SELECT COUNT(*) FROM ({sql})");
-        c.query_row(&count_sql, rusqlite::params_from_iter(vals.iter()), |r| r.get(0))
-            .unwrap_or(0)
+        c.query_row(&count_sql, rusqlite::params_from_iter(vals.iter()), |r| {
+            r.get(0)
+        })
+        .unwrap_or(0)
     };
 
     let limit = q.limit.clamp(1, 1000);
@@ -271,17 +340,18 @@ async fn api_podmiot(State(s): State<S>, AxPath(id): AxPath<i64>) -> ApiResult {
         let mut st = c
             .prepare("SELECT nazwa, mx, COALESCE(spf,''), COALESCE(dmarc,'') FROM domena WHERE podmiot_id=?1 ORDER BY nazwa")
             .map_err(err500)?;
-        let rows = st.query_map(rusqlite::params![id], |r| {
-            Ok(json!({
-                "nazwa": r.get::<_, String>(0)?,
-                "mx": r.get::<_, i64>(1)?,
-                "spf": r.get::<_, String>(2)?,
-                "dmarc": r.get::<_, String>(3)?,
-            }))
-        })
-        .map_err(err500)?
-        .filter_map(|r| r.ok())
-        .collect();
+        let rows = st
+            .query_map(rusqlite::params![id], |r| {
+                Ok(json!({
+                    "nazwa": r.get::<_, String>(0)?,
+                    "mx": r.get::<_, i64>(1)?,
+                    "spf": r.get::<_, String>(2)?,
+                    "dmarc": r.get::<_, String>(3)?,
+                }))
+            })
+            .map_err(err500)?
+            .filter_map(|r| r.ok())
+            .collect();
         rows
     };
 
@@ -289,16 +359,17 @@ async fn api_podmiot(State(s): State<S>, AxPath(id): AxPath<i64>) -> ApiResult {
         let mut st = c
             .prepare("SELECT email, COALESCE(rola,''), COALESCE(telefon,'') FROM osoba WHERE podmiot_id=?1 ORDER BY email")
             .map_err(err500)?;
-        let rows = st.query_map(rusqlite::params![id], |r| {
-            Ok(json!({
-                "email": r.get::<_, String>(0)?,
-                "rola": r.get::<_, String>(1)?,
-                "telefon": r.get::<_, String>(2)?,
-            }))
-        })
-        .map_err(err500)?
-        .filter_map(|r| r.ok())
-        .collect();
+        let rows = st
+            .query_map(rusqlite::params![id], |r| {
+                Ok(json!({
+                    "email": r.get::<_, String>(0)?,
+                    "rola": r.get::<_, String>(1)?,
+                    "telefon": r.get::<_, String>(2)?,
+                }))
+            })
+            .map_err(err500)?
+            .filter_map(|r| r.ok())
+            .collect();
         rows
     };
 
@@ -310,24 +381,27 @@ async fn api_podmiot(State(s): State<S>, AxPath(id): AxPath<i64>) -> ApiResult {
                  FROM interakcja WHERE podmiot_id=?1 ORDER BY ts DESC LIMIT 200",
             )
             .map_err(err500)?;
-        let rows = st.query_map(rusqlite::params![id], |r| {
-            Ok(json!({
-                "typ": r.get::<_, String>(0)?,
-                "kierunek": r.get::<_, String>(1)?,
-                "email": r.get::<_, String>(2)?,
-                "temat": r.get::<_, String>(3)?,
-                "ts": r.get::<_, i64>(4)?,
-                "wynik": r.get::<_, String>(5)?,
-                "ref": r.get::<_, String>(6)?,
-            }))
-        })
-        .map_err(err500)?
-        .filter_map(|r| r.ok())
-        .collect();
+        let rows = st
+            .query_map(rusqlite::params![id], |r| {
+                Ok(json!({
+                    "typ": r.get::<_, String>(0)?,
+                    "kierunek": r.get::<_, String>(1)?,
+                    "email": r.get::<_, String>(2)?,
+                    "temat": r.get::<_, String>(3)?,
+                    "ts": r.get::<_, i64>(4)?,
+                    "wynik": r.get::<_, String>(5)?,
+                    "ref": r.get::<_, String>(6)?,
+                }))
+            })
+            .map_err(err500)?
+            .filter_map(|r| r.ok())
+            .collect();
         rows
     };
 
-    Ok(Json(json!({ "podmiot": pod, "domeny": doms, "osoby": osoby, "interakcje": inter })))
+    Ok(Json(
+        json!({ "podmiot": pod, "domeny": doms, "osoby": osoby, "interakcje": inter }),
+    ))
 }
 
 // ---------------------------------------------------------------- query ---
@@ -387,20 +461,21 @@ async fn api_graph(State(s): State<S>) -> ApiResult {
                  FROM podmiot p",
             )
             .map_err(err500)?;
-        let rows = sp.query_map([], |r| {
-            Ok(json!({
-                "id": r.get::<_, i64>(0)?,
-                "nazwa": r.get::<_, String>(1)?,
-                "sektor": r.get::<_, String>(2)?,
-                "miasto": r.get::<_, String>(3)?,
-                "pop": r.get::<_, Option<i64>>(4)?.unwrap_or(0),
-                "score": r.get::<_, Option<i64>>(5)?.unwrap_or(0),
-                "kontakt": r.get::<_, i64>(6)?,
-            }))
-        })
-        .map_err(err500)?
-        .filter_map(|r| r.ok())
-        .collect();
+        let rows = sp
+            .query_map([], |r| {
+                Ok(json!({
+                    "id": r.get::<_, i64>(0)?,
+                    "nazwa": r.get::<_, String>(1)?,
+                    "sektor": r.get::<_, String>(2)?,
+                    "miasto": r.get::<_, String>(3)?,
+                    "pop": r.get::<_, Option<i64>>(4)?.unwrap_or(0),
+                    "score": r.get::<_, Option<i64>>(5)?.unwrap_or(0),
+                    "kontakt": r.get::<_, i64>(6)?,
+                }))
+            })
+            .map_err(err500)?
+            .filter_map(|r| r.ok())
+            .collect();
         rows
     };
 
@@ -408,18 +483,19 @@ async fn api_graph(State(s): State<S>) -> ApiResult {
         let mut sd = c
             .prepare("SELECT id, nazwa, mx, COALESCE(dmarc,''), podmiot_id FROM domena")
             .map_err(err500)?;
-        let rows = sd.query_map([], |r| {
-            Ok(json!({
-                "id": r.get::<_, i64>(0)?,
-                "nazwa": r.get::<_, String>(1)?,
-                "mx": r.get::<_, i64>(2)?,
-                "dmarc": r.get::<_, String>(3)?,
-                "podmiot_id": r.get::<_, i64>(4)?,
-            }))
-        })
-        .map_err(err500)?
-        .filter_map(|r| r.ok())
-        .collect();
+        let rows = sd
+            .query_map([], |r| {
+                Ok(json!({
+                    "id": r.get::<_, i64>(0)?,
+                    "nazwa": r.get::<_, String>(1)?,
+                    "mx": r.get::<_, i64>(2)?,
+                    "dmarc": r.get::<_, String>(3)?,
+                    "podmiot_id": r.get::<_, i64>(4)?,
+                }))
+            })
+            .map_err(err500)?
+            .filter_map(|r| r.ok())
+            .collect();
         rows
     };
 
@@ -427,16 +503,17 @@ async fn api_graph(State(s): State<S>) -> ApiResult {
         let mut so = c
             .prepare("SELECT id, email, podmiot_id FROM osoba")
             .map_err(err500)?;
-        let rows = so.query_map([], |r| {
-            Ok(json!({
-                "id": r.get::<_, i64>(0)?,
-                "email": r.get::<_, String>(1)?,
-                "podmiot_id": r.get::<_, i64>(2)?,
-            }))
-        })
-        .map_err(err500)?
-        .filter_map(|r| r.ok())
-        .collect();
+        let rows = so
+            .query_map([], |r| {
+                Ok(json!({
+                    "id": r.get::<_, i64>(0)?,
+                    "email": r.get::<_, String>(1)?,
+                    "podmiot_id": r.get::<_, i64>(2)?,
+                }))
+            })
+            .map_err(err500)?
+            .filter_map(|r| r.ok())
+            .collect();
         rows
     };
 
@@ -445,14 +522,17 @@ async fn api_graph(State(s): State<S>) -> ApiResult {
         let mut se = c
             .prepare("SELECT DISTINCT email FROM interakcja WHERE typ='email_sent' AND email IS NOT NULL")
             .map_err(err500)?;
-        let rows = se.query_map([], |r| r.get::<_, String>(0))
+        let rows = se
+            .query_map([], |r| r.get::<_, String>(0))
             .map_err(err500)?
             .filter_map(|r| r.ok())
             .collect();
         rows
     };
 
-    Ok(Json(json!({ "podmioty": pods, "domeny": doms, "osoby": osoby, "emailed": emailed })))
+    Ok(Json(
+        json!({ "podmioty": pods, "domeny": doms, "osoby": osoby, "emailed": emailed }),
+    ))
 }
 
 // ------------------------------------------------------------------- ai ---
@@ -475,13 +555,21 @@ async fn api_ai(State(s): State<S>, Json(body): Json<AiBody>) -> ApiResult {
     // "internet <frazа>" = jawne wymuszenie OSINT (jak przycisk net)
     let foldq = crate::ontology::fold_str(&body.q);
     let strip_prefix = foldq.starts_with("internet ");
-    let search_phrase: &str = if strip_prefix { body.q["internet ".len()..].trim() } else { body.q.as_str() };
+    let search_phrase: &str = if strip_prefix {
+        body.q["internet ".len()..].trim()
+    } else {
+        body.q.as_str()
+    };
     let force_internet = body.mode.as_deref() == Some("internet") || strip_prefix;
     let is_external = plan.target == Target::External;
     // HYBRID: fraza bez predykatorów (albo wymuszona) → internet;
     // fraza z predykatorami → LOKAL + INTERNET równolegle
     let local_worth = !is_external && !plan.preds.is_empty();
-    let internet_worth = !local_worth || plan.preds.iter().any(|p| matches!(p, crate::intel::Pred::Text(_)));
+    let internet_worth = !local_worth
+        || plan
+            .preds
+            .iter()
+            .any(|p| matches!(p, crate::intel::Pred::Text(_)));
 
     if !is_external && !local_worth && !force_internet && !internet_worth {
         return Err(AppError(
@@ -517,7 +605,11 @@ async fn api_ai(State(s): State<S>, Json(body): Json<AiBody>) -> ApiResult {
         {
             let onto = lock_onto(&s);
             persist_discovery(&onto, &rep);
-            onto.log_audyt("ai", "recon", &format!("{} → {}", body.q, rep["domain"].as_str().unwrap_or("-")));
+            onto.log_audyt(
+                "ai",
+                "recon",
+                &format!("{} → {}", body.q, rep["domain"].as_str().unwrap_or("-")),
+            );
         }
         return Ok(Json(json!({
             "mode": "external",
@@ -534,14 +626,21 @@ async fn api_ai(State(s): State<S>, Json(body): Json<AiBody>) -> ApiResult {
             let onto = lock_onto(&s);
             intel::execute(&onto, &plan).map_err(err500)?
         };
-        lock_onto(&s).log_audyt("ai", "local", &format!("{} → {}", body.q, out["said"].as_str().unwrap_or("")));
+        lock_onto(&s).log_audyt(
+            "ai",
+            "local",
+            &format!("{} → {}", body.q, out["said"].as_str().unwrap_or("")),
+        );
         Some(out)
     } else {
         None
     };
 
     let internet_res = if internet_worth || force_internet {
-        let phrase = plan.external_q.clone().unwrap_or_else(|| search_phrase.to_string());
+        let phrase = plan
+            .external_q
+            .clone()
+            .unwrap_or_else(|| search_phrase.to_string());
         let db = DB_PATH
             .get()
             .cloned()
@@ -555,7 +654,15 @@ async fn api_ai(State(s): State<S>, Json(body): Json<AiBody>) -> ApiResult {
         .await
         .map_err(|e| AppError(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
         .map_err(err500)?;
-        lock_onto(&s).log_audyt("ai", "internet", &format!("{} → {} wyników", body.q, int_res["count"].as_i64().unwrap_or(0)));
+        lock_onto(&s).log_audyt(
+            "ai",
+            "internet",
+            &format!(
+                "{} → {} wyników",
+                body.q,
+                int_res["count"].as_i64().unwrap_or(0)
+            ),
+        );
         Some(int_res)
     } else {
         None
@@ -654,10 +761,7 @@ struct DiscoverBody {
     q: String,
 }
 
-async fn api_discover(
-    State(s): State<S>,
-    Json(body): Json<DiscoverBody>,
-) -> ApiResult {
+async fn api_discover(State(s): State<S>, Json(body): Json<DiscoverBody>) -> ApiResult {
     use crate::discovery;
 
     let q = discovery::normalize(&body.q);
@@ -683,7 +787,11 @@ async fn api_discover(
     .map_err(|e| AppError(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
     .map_err(|e| AppError(StatusCode::INTERNAL_SERVER_ERROR, e))?;
 
-    lock_onto(&s).log_audyt("console", "discover", &format!("{} → {}", body.q, res["domain"].as_str().unwrap_or("-")));
+    lock_onto(&s).log_audyt(
+        "console",
+        "discover",
+        &format!("{} → {}", body.q, res["domain"].as_str().unwrap_or("-")),
+    );
 
     Ok(Json(res))
 }
@@ -697,7 +805,10 @@ fn persist_discovery(onto: &crate::ontology::Ontology, rep: &Value) {
     let dns = &rep["dns"];
     let has_mail = dns["has_mail"].as_bool().unwrap_or(false);
     let first = |k: &str| -> Option<&str> {
-        dns[k].as_array().and_then(|a| a.first()).and_then(|x| x.as_str())
+        dns[k]
+            .as_array()
+            .and_then(|a| a.first())
+            .and_then(|x| x.as_str())
     };
     let spf = first("spf");
     let dmarc = first("dmarc");
@@ -715,7 +826,10 @@ fn persist_discovery(onto: &crate::ontology::Ontology, rep: &Value) {
         let title = www["title"].as_str().unwrap_or("");
         let url = www["url"].as_str().unwrap_or("");
         let desc = www["description"].as_str().unwrap_or("");
-        let phones = www["phones"].as_array().and_then(|a| a.first()).and_then(|x| x.as_str());
+        let phones = www["phones"]
+            .as_array()
+            .and_then(|a| a.first())
+            .and_then(|x| x.as_str());
         if let Some(p) = pid {
             onto.fill_podmiot_meta(
                 p,
@@ -760,4 +874,49 @@ fn persist_discovery(onto: &crate::ontology::Ontology, rep: &Value) {
 // -------------------------------------------------------------- konsola ---
 
 const CONSOLE_HTML: &str = include_str!("console.html");
+
 const ASSET_ENGINE_JS: &str = include_str!("graph-engine.js");
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn auth_off_allows_everything() {
+        assert!(request_authorized("/api/stats", None, None));
+        assert!(request_authorized("/api/stats", Some("Bearer zły"), None));
+        assert!(request_authorized("/", None, None));
+    }
+
+    #[test]
+    fn api_paths_require_bearer_when_token_set() {
+        let tok = Some("sekret");
+        assert!(!request_authorized("/api/stats", None, tok));
+        assert!(!request_authorized("/api/stats", Some("Bearer zły"), tok));
+        assert!(!request_authorized("/api/stats", Some("Basic sekret"), tok));
+        assert!(request_authorized("/api/stats", Some("Bearer sekret"), tok));
+    }
+
+    #[test]
+    fn console_and_assets_stay_public() {
+        let tok = Some("sekret");
+        assert!(request_authorized("/", None, tok));
+        assert!(request_authorized("/assets/graph-engine.js", None, tok));
+    }
+
+    #[test]
+    fn prefix_lookalike_paths_are_protected() {
+        // "/api" bez ukośnika to nie endpoint API — ale też nie konsola;
+        // middleware chroni wyłącznie "/api/*", co testujemy wprost.
+        let tok = Some("sekret");
+        assert!(!request_authorized("/api/query", None, tok));
+    }
+
+    #[test]
+    fn constant_time_eq_basics() {
+        assert!(constant_time_eq(b"abc", b"abc"));
+        assert!(!constant_time_eq(b"abc", b"abd"));
+        assert!(!constant_time_eq(b"abc", b"abcd"));
+        assert!(constant_time_eq(b"", b""));
+    }
+}

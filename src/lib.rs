@@ -24,4 +24,6 @@ pub mod store;
 pub mod viz;
 
 pub use model::{Hook, Lead, Sector};
-pub use score::{dedupe, export_csv, load_json, manifest_hash, rank, run, validate, PipelineReport};
+pub use score::{
+    dedupe, export_csv, load_json, manifest_hash, rank, run, validate, PipelineReport,
+};

@@ -159,7 +159,11 @@ impl Lead {
             s += 3;
         }
         // lokalny boost — nasz region, kontakt osobisty realny (v0.2)
-        if self.voivodeship.trim().eq_ignore_ascii_case("zachodniopomorskie") {
+        if self
+            .voivodeship
+            .trim()
+            .eq_ignore_ascii_case("zachodniopomorskie")
+        {
             s += 2;
         }
         // freemail = prywatna skrzynka, martwy tor w outreachu B2B (v0.2)
@@ -173,9 +177,20 @@ impl Lead {
     pub fn is_freemail(email: &str) -> bool {
         let dom = email.split('@').nth(1).unwrap_or("").to_lowercase();
         const FREE: [&str; 14] = [
-            "wp.pl", "op.pl", "onet.pl", "interia.pl", "gmail.com", "o2.pl", "vp.pl",
-            "poczta.onet.pl", "poczta.fm", "tlen.pl", "go2.pl", "hotmail.com",
-            "yahoo.com", "neostrada.pl",
+            "wp.pl",
+            "op.pl",
+            "onet.pl",
+            "interia.pl",
+            "gmail.com",
+            "o2.pl",
+            "vp.pl",
+            "poczta.onet.pl",
+            "poczta.fm",
+            "tlen.pl",
+            "go2.pl",
+            "hotmail.com",
+            "yahoo.com",
+            "neostrada.pl",
         ];
         FREE.contains(&dom.as_str())
     }
@@ -184,9 +199,18 @@ impl Lead {
     /// wojewódzka/onkologia/instytut) — rozróżnia szpital powiatowy od USK.
     pub fn is_institutional(&self) -> bool {
         let n = self.org.to_lowercase();
-        ["klinicz", "uniwersyteck", "wojewódzk", "wojewodzk", "wojskow", "mswia", "onkolog", "instytut"]
-            .iter()
-            .any(|k| n.contains(k))
+        [
+            "klinicz",
+            "uniwersyteck",
+            "wojewódzk",
+            "wojewodzk",
+            "wojskow",
+            "mswia",
+            "onkolog",
+            "instytut",
+        ]
+        .iter()
+        .any(|k| n.contains(k))
     }
 
     /// Tier kampanijny: HOT = 1. fala, WARM = 2. fala, COLD = nurture.

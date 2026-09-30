@@ -4,8 +4,9 @@
 //! jako sygnał sprzedażowy i personalizacja maili).
 
 use crate::model::Lead;
+use serde::Deserialize;
 use sha2::{Digest, Sha256};
-use serde::Deserialize;use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashSet};
 
 /// Wynik przetworzenia wsadu.
 #[derive(Debug, Default)]
@@ -141,7 +142,11 @@ pub fn manifest_hash(leads: &[Lead]) -> String {
     for l in leads {
         let mut h = Sha256::new();
         h.update(l.email.trim().to_lowercase().as_bytes());
-        let id: String = h.finalize().iter().map(|b| format!("{b:02x}")).collect::<String>()[..16]
+        let id: String = h
+            .finalize()
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect::<String>()[..16]
             .to_string();
         map.insert(id, l.score());
     }
@@ -193,8 +198,20 @@ mod tests {
 
     #[test]
     fn ksc_deadline_far_to_slabym_hookiem() {
-        let soon = lead("A", "a@a.pl", Sector::Water, vec![Hook::KscDeadline(3)], false);
-        let far = lead("A", "a@a.pl", Sector::Water, vec![Hook::KscDeadline(30)], false);
+        let soon = lead(
+            "A",
+            "a@a.pl",
+            Sector::Water,
+            vec![Hook::KscDeadline(3)],
+            false,
+        );
+        let far = lead(
+            "A",
+            "a@a.pl",
+            Sector::Water,
+            vec![Hook::KscDeadline(30)],
+            false,
+        );
         assert_eq!(soon.score(), far.score() + 2);
     }
 
@@ -226,10 +243,19 @@ mod tests {
 
     #[test]
     fn csv_escaping_i_naglowek() {
-        let l = lead("ZWiK; Police", "a@a.pl", Sector::Water, vec![Hook::Nis2Window], false);
+        let l = lead(
+            "ZWiK; Police",
+            "a@a.pl",
+            Sector::Water,
+            vec![Hook::Nis2Window],
+            false,
+        );
         let csv = export_csv(&[l]);
         let lines: Vec<&str> = csv.lines().collect();
-        assert_eq!(lines[0], "EMAIL;ORG;SECTOR;VOIVODESHIP;SCORE;TIER;HOOKS;SOURCE");
+        assert_eq!(
+            lines[0],
+            "EMAIL;ORG;SECTOR;VOIVODESHIP;SCORE;TIER;HOOKS;SOURCE"
+        );
         assert!(lines[1].contains("ZWiK, Police"));
         assert!(lines[1].ends_with("WARM;NIS2: środki do 3.04.2027;test"));
     }

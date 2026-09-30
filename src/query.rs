@@ -119,9 +119,14 @@ fn where_for(
             ("podmioty", "wojewodztwo", '~') => ("p.wojewodztwo", "LIKE"),
             ("podmioty", "miasto", '~') => ("p.miasto", "LIKE"),
             ("podmioty", "nazwa", '~') => ("p.nazwa", "LIKE"),
-            ("podmioty", "pop", '>') | ("podmioty", "pop", '<') | ("podmioty", "pop", '=') => {
-                ("p.pop", match f.op { '>' => ">", '<' => "<", _ => "=" })
-            }
+            ("podmioty", "pop", '>') | ("podmioty", "pop", '<') | ("podmioty", "pop", '=') => (
+                "p.pop",
+                match f.op {
+                    '>' => ">",
+                    '<' => "<",
+                    _ => "=",
+                },
+            ),
             ("podmioty", "ksc", '=') => ("p.ksc_status", "="),
             ("przetargi", "status", '=') => ("t.status", "="),
             ("przetargi", "cpv", '~') => ("t.cpv", "LIKE"),
@@ -150,9 +155,7 @@ pub fn run(o: &Ontology, q: &Query) -> Result<Vec<String>, String> {
         "podmioty" => {
             let (w, v) = where_for("podmioty", &first.filters, 0)?;
             (
-                format!(
-                    "SELECT p.nazwa, p.sektor, p.miasto, p.pop FROM podmiot p WHERE {w}"
-                ),
+                format!("SELECT p.nazwa, p.sektor, p.miasto, p.pop FROM podmiot p WHERE {w}"),
                 v,
             )
         }
@@ -168,9 +171,7 @@ pub fn run(o: &Ontology, q: &Query) -> Result<Vec<String>, String> {
         "interakcje" => {
             let (w, v) = where_for("interakcje", &first.filters, 0)?;
             (
-                format!(
-                    "SELECT i.ts, i.typ, i.email, i.temat FROM interakcja i WHERE {w}"
-                ),
+                format!("SELECT i.ts, i.typ, i.email, i.temat FROM interakcja i WHERE {w}"),
                 v,
             )
         }
@@ -197,9 +198,7 @@ pub fn run(o: &Ontology, q: &Query) -> Result<Vec<String>, String> {
     sql.push_str(&format!(" LIMIT {}", q.limit));
 
     let conn = o.conn();
-    let mut stmt = conn
-        .prepare(&sql)
-        .map_err(|e| format!("SQL: {e}"))?;
+    let mut stmt = conn.prepare(&sql).map_err(|e| format!("SQL: {e}"))?;
     let ncols = stmt.column_count();
     let pv: Vec<&str> = vals.iter().map(|s| s.as_str()).collect();
     let rows = stmt
@@ -222,7 +221,8 @@ pub fn run(o: &Ontology, q: &Query) -> Result<Vec<String>, String> {
             Ok(cells.join(" | "))
         })
         .map_err(|e| format!("SQL: {e}"))?;
-    rows.collect::<rusqlite::Result<Vec<String>>>().map_err(|e| e.to_string())
+    rows.collect::<rusqlite::Result<Vec<String>>>()
+        .map_err(|e| e.to_string())
 }
 
 #[cfg(test)]
@@ -231,10 +231,8 @@ mod tests {
 
     #[test]
     fn parser_rozpoznaje_filtry_i_negacje() {
-        let q = parse(
-            "podmioty[sektor=water,pop>100000] !interakcje[email_sent] limit 10",
-        )
-        .unwrap();
+        let q =
+            parse("podmioty[sektor=water,pop>100000] !interakcje[email_sent] limit 10").unwrap();
         assert_eq!(q.limit, 10);
         assert_eq!(q.terms.len(), 2);
         assert_eq!(q.terms[0].object, "podmioty");

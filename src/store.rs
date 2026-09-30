@@ -34,7 +34,11 @@ pub fn audit_domain(domain: &str, server: &str) -> DnsAudit {
     // ponownie: zbierz TXT z zapytania o _dmarc — answers[3] jeśli było
     if let Some(ans) = answers.get(3).map(|(_, a)| a.clone()) {
         if !ans.is_nxdomain() {
-            if let Some(d) = ans.txt_strings().into_iter().find(|t| t.starts_with("v=DMARC1")) {
+            if let Some(d) = ans
+                .txt_strings()
+                .into_iter()
+                .find(|t| t.starts_with("v=DMARC1"))
+            {
                 audit.dmarc = Some(d);
             }
         }
@@ -48,7 +52,8 @@ pub fn audit_all(leads: &[Lead], server: &str) -> BTreeMap<String, DnsAudit> {
     let mut out = BTreeMap::new();
     for l in leads {
         if let Some(d) = l.effective_domain() {
-            out.entry(d.clone()).or_insert_with(|| audit_domain(&d, server));
+            out.entry(d.clone())
+                .or_insert_with(|| audit_domain(&d, server));
         }
     }
     out

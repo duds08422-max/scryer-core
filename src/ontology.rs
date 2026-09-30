@@ -43,14 +43,14 @@ pub struct Domena {
 #[derive(Debug, Clone)]
 pub struct Interakcja {
     pub id: i64,
-    pub typ: String,       // email_sent|email_recv|call|odpowiedz|notatka
-    pub kierunek: String,  // out|in|-
+    pub typ: String,      // email_sent|email_recv|call|odpowiedz|notatka
+    pub kierunek: String, // out|in|-
     pub email: String,
     pub podmiot_id: Option<i64>,
     pub temat: String,
     pub ts: i64,
-    pub wynik: String,     // odpowiedziano|brak|optout|pilot|-
-    pub ref_id: String,    // message-id / identyfikator w outbox.jsonl
+    pub wynik: String,  // odpowiedziano|brak|optout|pilot|-
+    pub ref_id: String, // message-id / identyfikator w outbox.jsonl
 }
 
 impl Ontology {
@@ -58,12 +58,7 @@ impl Ontology {
     pub fn log_audyt(&self, aktor: &str, akcja: &str, szczegoly: &str) {
         let _ = self.conn.execute(
             "INSERT INTO audyt (ts, aktor, akcja, szczegoly) VALUES (?1, ?2, ?3, ?4)",
-            params![
-                now_secs(),
-                aktor,
-                akcja,
-                szczegoly
-            ],
+            params![now_secs(), aktor, akcja, szczegoly],
         );
     }
 
@@ -158,11 +153,14 @@ impl Ontology {
     /// Zwraca id; podmiot_id = 0 oznacza „bez ownera” w kontekście discovery.
     pub fn upsert_domena_free(&self, nazwa: &str, mx: bool) -> SqlResult<i64> {
         // juz istnieje → tylko update mx
-        if let Ok(id) = self
-            .conn
-            .query_row("SELECT id FROM domena WHERE nazwa=?1", params![nazwa], |r| r.get::<_, i64>(0))
-        {
-            let _ = self.conn.execute("UPDATE domena SET mx=?1 WHERE id=?2", params![mx, id]);
+        if let Ok(id) = self.conn.query_row(
+            "SELECT id FROM domena WHERE nazwa=?1",
+            params![nazwa],
+            |r| r.get::<_, i64>(0),
+        ) {
+            let _ = self
+                .conn
+                .execute("UPDATE domena SET mx=?1 WHERE id=?2", params![mx, id]);
             return Ok(id);
         }
         // schema wymaga podmiot_id NOT NULL — używaj tylko z właścicielem; free → panic-free fallback:
@@ -238,7 +236,15 @@ impl Ontology {
                  RETURNING id",
             )?;
             stmt.query_row(
-                params![p.nazwa, n, p.sektor, p.wojewodztwo, p.miasto, p.pop, p.zrodla],
+                params![
+                    p.nazwa,
+                    n,
+                    p.sektor,
+                    p.wojewodztwo,
+                    p.miasto,
+                    p.pop,
+                    p.zrodla
+                ],
                 |r| r.get(0),
             )?
         } else {
@@ -259,7 +265,11 @@ impl Ontology {
              ON CONFLICT(nazwa) DO UPDATE SET mx=excluded.mx",
             params![nazwa, mx, podmiot_id],
         )?;
-        self.conn.query_row("SELECT id FROM domena WHERE nazwa=?1", params![nazwa], |r| r.get(0))
+        self.conn.query_row(
+            "SELECT id FROM domena WHERE nazwa=?1",
+            params![nazwa],
+            |r| r.get(0),
+        )
     }
 
     /// Zapis interakcji (kinetyka: wysłany/odebrany mail, notatka).
@@ -360,7 +370,8 @@ impl Ontology {
                 Err(e) => return Err(e.to_string()),
             };
             if !dom.is_empty() {
-                self.upsert_domena(&dom, true, pid).map_err(|e| e.to_string())?;
+                self.upsert_domena(&dom, true, pid)
+                    .map_err(|e| e.to_string())?;
             }
             self.upsert_osoba_email(&l.email, "kontakt", pid)
                 .map_err(|e| e.to_string())?;
@@ -404,7 +415,14 @@ impl Ontology {
     /// Liczba wierszy w tabeli (do `ask stats`).
     pub fn count_table(&self, table: &str) -> SqlResult<i64> {
         // biała lista — bez interpolacji z wejścia użytkownika
-        let allowed = ["podmiot", "domena", "osoba", "przetarg", "interakcja", "audyt"];
+        let allowed = [
+            "podmiot",
+            "domena",
+            "osoba",
+            "przetarg",
+            "interakcja",
+            "audyt",
+        ];
         if !allowed.contains(&table) {
             return Err(rusqlite::Error::InvalidParameterName("bad table".into()));
         }

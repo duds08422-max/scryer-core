@@ -67,7 +67,11 @@ const SIGNALS: &[(&str, u32, &str)] = &[
     ("logi", 3, "logi/zbieranie logów"),
     (" zbieranie log", 3, "zbieranie logów"),
     ("analyz", 3, "analiza zdarzeń"),
-    ("ibpl", 4, "IBPL/ustawa o krajowym systemie cyberbezpieczeństwa"),
+    (
+        "ibpl",
+        4,
+        "IBPL/ustawa o krajowym systemie cyberbezpieczeństwa",
+    ),
     ("ksc", 4, "KSC w przedmiocie"),
     ("nis2", 4, "NIS2"),
     ("hsm", 2, "HSM (otoczenie bezpieczeństwa)"),
@@ -97,7 +101,11 @@ const SECTORS: &[(&str, u32, &str)] = &[
 
 /// Kod CPV 72 = usługi IT/software → bonus.
 fn cpv_bonus(cpv: &str) -> Option<(u32, String)> {
-    let c: String = cpv.chars().filter(|ch| ch.is_ascii_digit()).take(2).collect();
+    let c: String = cpv
+        .chars()
+        .filter(|ch| ch.is_ascii_digit())
+        .take(2)
+        .collect();
     match c.as_str() {
         "72" => Some((4, "CPV 72xxx: usługi IT".into())),
         "64" => Some((2, "CPV 64xxx: usługi telekomunikacyjne".into())),
@@ -109,8 +117,13 @@ fn cpv_bonus(cpv: &str) -> Option<(u32, String)> {
 pub fn score(t: &Tender) -> Match {
     let mut s = 0u32;
     let mut reasons = Vec::new();
-    let hay = format!("{} {} {}", t.title, t.title.to_lowercase(), t.org.to_lowercase())
-        .to_lowercase();
+    let hay = format!(
+        "{} {} {}",
+        t.title,
+        t.title.to_lowercase(),
+        t.org.to_lowercase()
+    )
+    .to_lowercase();
 
     for (kw, pts, why) in SIGNALS {
         if hay.contains(kw) {
@@ -157,7 +170,8 @@ mod tests {
     #[test]
     fn siem_dla_wodkanu_jest_hot() {
         let t = Tender {
-            title: "Zakup i wdrozenie systemu SIEM z obsluga monitoringu zdarzen bezpieczenstwa".into(),
+            title: "Zakup i wdrozenie systemu SIEM z obsluga monitoringu zdarzen bezpieczenstwa"
+                .into(),
             org: "Miejskie Przedsiebiorstwo Wodociagow i Kanalizacji".into(),
             url: "https://bip.example/1".into(),
             published: "2026-09-29".into(),

@@ -25,28 +25,35 @@ impl DnsAudit {
     /// Interpretacja zebranych rekordów (reguły MVP, deterministyczne).
     pub fn analyze(&mut self) {
         if self.nxdomain {
-            self.findings.push("domena nie istnieje (NXDOMAIN) — mail odbije".into());
+            self.findings
+                .push("domena nie istnieje (NXDOMAIN) — mail odbije".into());
             return;
         }
         if !self.has_mx {
-            self.findings.push("brak MX — domena nie odbiera maila (kontakt inny kanał)".into());
+            self.findings
+                .push("brak MX — domena nie odbiera maila (kontakt inny kanał)".into());
         }
         match &self.spf {
-            None => self.findings.push("brak SPF — spoofing nazwy domeny trywialny".into()),
-            Some(spf) if spf.contains("+all") || spf.contains("?all") => {
-                self.findings.push("SPF przepuszcza wszystko (+all/?all) — zerowa ochrona".into())
-            }
+            None => self
+                .findings
+                .push("brak SPF — spoofing nazwy domeny trywialny".into()),
+            Some(spf) if spf.contains("+all") || spf.contains("?all") => self
+                .findings
+                .push("SPF przepuszcza wszystko (+all/?all) — zerowa ochrona".into()),
             _ => {}
         }
         match &self.dmarc {
-            None => self.findings.push("brak DMARC — brak raportowania i polityki spoofingu".into()),
-            Some(d) if d.contains("p=none") => {
-                self.findings.push("DMARC p=none — tylko monitoring, brak egzekwowania".into())
-            }
+            None => self
+                .findings
+                .push("brak DMARC — brak raportowania i polityki spoofingu".into()),
+            Some(d) if d.contains("p=none") => self
+                .findings
+                .push("DMARC p=none — tylko monitoring, brak egzekwowania".into()),
             _ => {}
         }
         if self.findings.is_empty() {
-            self.findings.push("higiena DNS poprawna (MX+SPF+DMARC) — lead technicznie dojrzały".into());
+            self.findings
+                .push("higiena DNS poprawna (MX+SPF+DMARC) — lead technicznie dojrzały".into());
         }
     }
 
@@ -98,7 +105,10 @@ pub fn collect(domain: &str, answers: &[(&str, Answer)]) -> DnsAudit {
 }
 
 /// Zrzut JSON całego rankingu (snapshot do LOGU / analiz offline).
-pub fn snapshot_json(leads: &[Lead], audits: &std::collections::BTreeMap<String, DnsAudit>) -> String {
+pub fn snapshot_json(
+    leads: &[Lead],
+    audits: &std::collections::BTreeMap<String, DnsAudit>,
+) -> String {
     #[derive(Serialize)]
     struct Row<'a> {
         org: &'a str,
@@ -141,11 +151,18 @@ pub fn brief_markdown(l: &Lead, audit: Option<&DnsAudit>) -> String {
         out.push_str(&format!(
             "- **DNS-audit ({}):** {}\n",
             a.domain,
-            if a.findings.is_empty() { "brak danych".into() } else { a.findings.join("; ") }
+            if a.findings.is_empty() {
+                "brak danych".into()
+            } else {
+                a.findings.join("; ")
+            }
         ));
     }
     out.push_str("\n## Szkic maila\n\n");
-    out.push_str(&format!("Temat: Bezpieczeństwo IT {} — 2 rzeczy na wczoraj (KSC 3.10)\n\n", l.org));
+    out.push_str(&format!(
+        "Temat: Bezpieczeństwo IT {} — 2 rzeczy na wczoraj (KSC 3.10)\n\n",
+        l.org
+    ));
     out.push_str("Dzień dobry,\n\n");
     let hook_line = if l
         .hooks
@@ -156,9 +173,7 @@ pub fn brief_markdown(l: &Lead, audit: Option<&DnsAudit>) -> String {
     } else {
         "środki techniczne NIS2/UKSC wchodzą 3.04.2027 — planowanie warto zacząć wcześniej"
     };
-    out.push_str(&format!(
-        "piszę, bo {hook_line}. W skrócie:\n\n"
-    ));
+    out.push_str(&format!("piszę, bo {hook_line}. W skrócie:\n\n"));
     if let Some(a) = audit {
         for f in a.findings.iter().take(2) {
             if !f.contains("poprawna") {
@@ -224,16 +239,16 @@ mod tests {
     fn collect_czyta_odpowiedzi() {
         let mx = Answer {
             rcode: 0,
-            records: vec![Record::Mx { pref: 10, exchange: "mail.x.pl".into() }],
+            records: vec![Record::Mx {
+                pref: 10,
+                exchange: "mail.x.pl".into(),
+            }],
         };
         let txt = Answer {
             rcode: 0,
             records: vec![Record::Txt("v=spf1 mx ~all".into())],
         };
-        let a = collect(
-            "x.pl",
-            &[("MX", mx), ("TXT", txt)],
-        );
+        let a = collect("x.pl", &[("MX", mx), ("TXT", txt)]);
         assert!(a.has_mx);
         assert_eq!(a.mx, vec!["10 mail.x.pl"]);
         assert_eq!(a.spf.as_deref(), Some("v=spf1 mx ~all"));

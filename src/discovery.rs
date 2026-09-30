@@ -61,7 +61,8 @@ pub fn normalize(query: &str) -> Query {
     }
     // coś co wygląda jak domena (kropka, bez spacji, znane TLD-ish)
     if lower.contains('.') && !lower.contains(' ') {
-        let dom = lower.trim_start_matches("http://")
+        let dom = lower
+            .trim_start_matches("http://")
             .trim_start_matches("https://")
             .trim_start_matches("www.")
             .split('/')
@@ -69,10 +70,18 @@ pub fn normalize(query: &str) -> Query {
             .unwrap_or("")
             .to_string();
         if dom.contains('.') {
-            return Query { domain: dom, phrase: q.to_string(), kind: Kind::Domain };
+            return Query {
+                domain: dom,
+                phrase: q.to_string(),
+                kind: Kind::Domain,
+            };
         }
     }
-    Query { domain: String::new(), phrase: q.to_string(), kind: Kind::Phrase }
+    Query {
+        domain: String::new(),
+        phrase: q.to_string(),
+        kind: Kind::Phrase,
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -128,7 +137,15 @@ fn guess_domain(phrase: &str) -> Option<String> {
             if let Some(u) = r[key].as_str() {
                 if let Some(dom) = host_of(u) {
                     // pomiń agregatory/portale — chodzi o domenę samej firmy
-                    let skip = ["duckduckgo", "wikipedia.org", "youtube.", "facebook.", "linkedin.", "instagram.", "google."];
+                    let skip = [
+                        "duckduckgo",
+                        "wikipedia.org",
+                        "youtube.",
+                        "facebook.",
+                        "linkedin.",
+                        "instagram.",
+                        "google.",
+                    ];
                     if !skip.iter().any(|s| dom.contains(s)) {
                         return Some(dom);
                     }
@@ -142,7 +159,11 @@ fn guess_domain(phrase: &str) -> Option<String> {
 fn host_of(url: &str) -> Option<String> {
     let rest = url.split_once("://").map(|x| x.1).unwrap_or(url);
     let host = rest.split('/').next()?;
-    if host.contains('.') { Some(host.trim_start_matches("www.").to_string()) } else { None }
+    if host.contains('.') {
+        Some(host.trim_start_matches("www.").to_string())
+    } else {
+        None
+    }
 }
 
 // ─────────────────────────────────────────────── DNS ─────────────────────
@@ -153,18 +174,30 @@ fn dns_server() -> String {
 
 fn dns_q(name: &str, qtype: u16) -> Vec<Record> {
     dnsmini::query(name, qtype, &dns_server(), Duration::from_secs(4))
-        .map(|a| if a.is_nxdomain() { Vec::new() } else { a.records })
+        .map(|a| {
+            if a.is_nxdomain() {
+                Vec::new()
+            } else {
+                a.records
+            }
+        })
         .unwrap_or_default()
 }
 
 fn dns_recon(dom: &str) -> Value {
     let a: Vec<String> = dns_q(dom, 1)
         .into_iter()
-        .filter_map(|r| match r { Record::A(ip) => Some(ip.to_string()), _ => None })
+        .filter_map(|r| match r {
+            Record::A(ip) => Some(ip.to_string()),
+            _ => None,
+        })
         .collect();
     let aaaa: Vec<String> = dns_q(dom, 28)
         .into_iter()
-        .filter_map(|r| match r { Record::A(ip) => Some(ip.to_string()), _ => None })
+        .filter_map(|r| match r {
+            Record::A(ip) => Some(ip.to_string()),
+            _ => None,
+        })
         .collect();
     let mx: Vec<String> = dns_q(dom, 15)
         .into_iter()
@@ -175,14 +208,24 @@ fn dns_recon(dom: &str) -> Value {
         .collect();
     let ns: Vec<String> = dns_q(dom, 2)
         .into_iter()
-        .filter_map(|r| match r { Record::Ns(n) => Some(n), _ => None })
+        .filter_map(|r| match r {
+            Record::Ns(n) => Some(n),
+            _ => None,
+        })
         .collect();
-    let txt: Vec<String> = dns_q(dom, 16).into_iter().filter_map(|r| match r {
-        Record::Txt(s) => Some(s), _ => None,
-    }).collect();
+    let txt: Vec<String> = dns_q(dom, 16)
+        .into_iter()
+        .filter_map(|r| match r {
+            Record::Txt(s) => Some(s),
+            _ => None,
+        })
+        .collect();
     let dmarc: Vec<String> = dns_q(&format!("_dmarc.{dom}"), 16)
         .into_iter()
-        .filter_map(|r| match r { Record::Txt(s) => Some(s), _ => None })
+        .filter_map(|r| match r {
+            Record::Txt(s) => Some(s),
+            _ => None,
+        })
         .collect();
 
     json!({
@@ -205,7 +248,12 @@ fn rdap(dom: &str) -> Result<Value, String> {
         .as_array()
         .and_then(|ents| {
             ents.iter()
-                .find(|e| e["roles"].as_array().map(|r| r.iter().any(|x| x == "registrar")).unwrap_or(false))
+                .find(|e| {
+                    e["roles"]
+                        .as_array()
+                        .map(|r| r.iter().any(|x| x == "registrar"))
+                        .unwrap_or(false)
+                })
                 .and_then(|e| e["vcardArray"][1].as_array())
                 .and_then(|cards| {
                     cards.iter().find_map(|c| {
@@ -228,7 +276,11 @@ fn rdap(dom: &str) -> Result<Value, String> {
         .unwrap_or_default();
     let status: Vec<String> = v["status"]
         .as_array()
-        .map(|s| s.iter().filter_map(|x| x.as_str().map(String::from)).collect())
+        .map(|s| {
+            s.iter()
+                .filter_map(|x| x.as_str().map(String::from))
+                .collect()
+        })
         .unwrap_or_default();
     Ok(json!({ "registrar": registrar, "dates": dates, "status": status }))
 }
@@ -259,7 +311,11 @@ fn crtsh_subdomains(dom: &str) -> Result<Vec<String>, String> {
 /// Kradniemy tylko metadane strony: title, description, generator (CMS!),
 /// kontakty z mailto/tel. Legalne pasywne zbieranie (jak Googlebot, tylko rzadziej).
 fn www_recon(dom: &str) -> Value {
-    for url in [format!("https://{dom}"), format!("https://www.{dom}"), format!("http://{dom}")] {
+    for url in [
+        format!("https://{dom}"),
+        format!("https://www.{dom}"),
+        format!("http://{dom}"),
+    ] {
         match http_get(&url) {
             Ok(body) => return parse_www(&body, &url),
             Err(_) => continue,
@@ -286,20 +342,29 @@ fn parse_www(body: &str, url: &str) -> Value {
         .filter_map(|(i, _)| {
             let rest = &body[i + 4..];
             let end = rest.find(['"', '\'', '>']).unwrap_or(rest.len());
-            let ph: String = rest[..end].chars().filter(|c| c.is_ascii_digit() || *c == '+').collect();
+            let ph: String = rest[..end]
+                .chars()
+                .filter(|c| c.is_ascii_digit() || *c == '+')
+                .collect();
             (ph.len() >= 7).then_some(ph)
         })
         .collect();
     // gołe maile z tekstu (nie tylko mailto:): tokeny wyglądające jak x@y.z
     let plain_emails: BTreeSet<String> = body
-        .split(|c: char| !(c.is_ascii_alphanumeric() || c == '@' || c == '.' || c == '-' || c == '_'))
+        .split(|c: char| {
+            !(c.is_ascii_alphanumeric() || c == '@' || c == '.' || c == '-' || c == '_')
+        })
         .filter_map(|tok| {
-            let t = tok.trim_matches(|c: char| !c.is_ascii_alphanumeric()).to_lowercase();
+            let t = tok
+                .trim_matches(|c: char| !c.is_ascii_alphanumeric())
+                .to_lowercase();
             let (local, dom) = t.split_once('@')?;
             if local.is_empty() || dom.split('.').count() < 2 || t.contains(' ') {
                 return None;
             }
-            if t.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '@' | '.' | '-' | '_')) {
+            if t.chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '@' | '.' | '-' | '_'))
+            {
                 Some(t)
             } else {
                 None
@@ -309,12 +374,16 @@ fn parse_www(body: &str, url: &str) -> Value {
     let persons: BTreeSet<String> = body
         .split(|c: char| c.is_whitespace() || c == '"' || c == '<' || c == '>')
         .filter_map(|tok| {
-            let t = tok.trim_matches(|c: char| !c.is_ascii_alphanumeric()).to_lowercase();
+            let t = tok
+                .trim_matches(|c: char| !c.is_ascii_alphanumeric())
+                .to_lowercase();
             // imie.nazwisko@ (typowy wzorzec instytucjonalny) — bez końcówki @dom
             let (local, dompart) = t.split_once('@')?;
             if dompart.split('.').count() >= 2
                 && local.split('.').count() == 2
-                && local.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-')
+                && local
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-')
                 && local.len() >= 5
             {
                 Some(t)
@@ -376,10 +445,7 @@ fn web_search(query: &str) -> Value {
 }
 
 fn search_ddg(query: &str) -> Value {
-    let url = format!(
-        "https://html.duckduckgo.com/html/?q={}",
-        urlencoded(query)
-    );
+    let url = format!("https://html.duckduckgo.com/html/?q={}", urlencoded(query));
     let body = match http_get(&url) {
         Ok(b) => b,
         Err(e) => return json!({ "engine": "ddg", "error": e }),
@@ -388,10 +454,16 @@ fn search_ddg(query: &str) -> Value {
     // parsowanie bez DOM: linki result__a
     for (mi, _) in body.match_indices("result__a") {
         let seg = &body[mi..(mi + 2500).min(body.len())];
-        let href_i = match seg.find("href=\"") { Some(i) => i + 6, None => continue };
+        let href_i = match seg.find("href=\"") {
+            Some(i) => i + 6,
+            None => continue,
+        };
         let rest = &seg[href_i..];
         let href = &rest[..rest.find('"').unwrap_or(rest.len())];
-        let title_i = match rest.find('>') { Some(i) => i + 1, None => continue };
+        let title_i = match rest.find('>') {
+            Some(i) => i + 1,
+            None => continue,
+        };
         let titrest = &rest[title_i..];
         let title = &titrest[..titrest.find('<').unwrap_or(titrest.len())];
         // DDG owija URL w //duckduckgo.com/l/?uddg=<encoded>
@@ -405,7 +477,9 @@ fn search_ddg(query: &str) -> Value {
         if !real.is_empty() {
             results.push(json!({ "title": html_unescape(title.trim()), "url": real }));
         }
-        if results.len() >= 10 { break; }
+        if results.len() >= 10 {
+            break;
+        }
     }
     json!({ "engine": "ddg", "results": results })
 }
@@ -421,14 +495,29 @@ fn search_scrapingbee(query: &str, key: &str) -> Result<Value, String> {
     for (mi, _) in body.match_indices("<a href=\"") {
         let rest = &body[mi + 9..];
         let href = &rest[..rest.find('"').unwrap_or(rest.len())];
-        let skip_prefixes = ["google.", "/search?", "/webhp", "accounts.", "policies.", "support."];
-        if skip_prefixes.iter().any(|p| href.contains(p)) { continue; }
-        if !href.starts_with("http") { continue; }
+        let skip_prefixes = [
+            "google.",
+            "/search?",
+            "/webhp",
+            "accounts.",
+            "policies.",
+            "support.",
+        ];
+        if skip_prefixes.iter().any(|p| href.contains(p)) {
+            continue;
+        }
+        if !href.starts_with("http") {
+            continue;
+        }
         let trest = &rest[rest.find('"').map(|i| i + 1).unwrap_or(0)..];
         let title = between(trest, ">", "<").unwrap_or("").trim();
-        if title.is_empty() { continue; }
+        if title.is_empty() {
+            continue;
+        }
         results.push(json!({ "title": html_unescape(title), "url": href }));
-        if results.len() >= 10 { break; }
+        if results.len() >= 10 {
+            break;
+        }
     }
     Ok(json!({ "engine": "google-via-scrapingbee", "results": results }))
 }
@@ -437,7 +526,9 @@ fn urlencoded(s: &str) -> String {
     let mut out = String::new();
     for b in s.bytes() {
         match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => out.push(b as char),
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(b as char)
+            }
             b' ' => out.push('+'),
             other => out.push_str(&format!("%{other:02X}")),
         }
@@ -457,7 +548,11 @@ fn percent_decode(s: &str) -> String {
                 continue;
             }
         }
-        if b[i] == b'+' { out.push(b' '); } else { out.push(b[i]); }
+        if b[i] == b'+' {
+            out.push(b' ');
+        } else {
+            out.push(b[i]);
+        }
         i += 1;
     }
     String::from_utf8_lossy(&out).into_owned()
@@ -494,15 +589,32 @@ pub fn internet_search(phrase: &str) -> (Value, Vec<SearchHit>) {
     let res = web_search(phrase);
     let mut seen = BTreeSet::new();
     let mut hits: Vec<SearchHit> = Vec::new();
-    let skip = ["duckduckgo", "wikipedia.org", "youtube.", "facebook.", "linkedin.",
-                "instagram.", "google.", "twitter.", "x.com", "tiktok.", "pinterest."];
+    let skip = [
+        "duckduckgo",
+        "wikipedia.org",
+        "youtube.",
+        "facebook.",
+        "linkedin.",
+        "instagram.",
+        "google.",
+        "twitter.",
+        "x.com",
+        "tiktok.",
+        "pinterest.",
+    ];
     if let Some(arr) = res["results"].as_array() {
         for r in arr {
-            if hits.len() >= 8 { break; }
+            if hits.len() >= 8 {
+                break;
+            }
             let url = r["url"].as_str().unwrap_or("");
             let Some(dom) = host_of(url) else { continue };
-            if skip.iter().any(|s| dom.contains(s)) { continue; }
-            if !seen.insert(dom.clone()) { continue; }
+            if skip.iter().any(|s| dom.contains(s)) {
+                continue;
+            }
+            if !seen.insert(dom.clone()) {
+                continue;
+            }
             let (mx, mxp) = mx_provider(&dom);
             let dmarc = first_txt(&format!("_dmarc.{dom}"));
             let audit = www_audit(&dom);
@@ -510,7 +622,9 @@ pub fn internet_search(phrase: &str) -> (Value, Vec<SearchHit>) {
                 domain: dom.clone(),
                 title: r["title"].as_str().unwrap_or("").to_string(),
                 url: url.to_string(),
-                mx, mx_provider: mxp, dmarc,
+                mx,
+                mx_provider: mxp,
+                dmarc,
                 www_audit: audit,
             });
         }
@@ -520,9 +634,10 @@ pub fn internet_search(phrase: &str) -> (Value, Vec<SearchHit>) {
 
 /// Pierwszy rekord TXT danego klienta (dla DMARC).
 fn first_txt(name: &str) -> Option<String> {
-    dns_q(name, 16)
-        .into_iter()
-        .find_map(|r| match r { Record::Txt(s) => Some(s), _ => None })
+    dns_q(name, 16).into_iter().find_map(|r| match r {
+        Record::Txt(s) => Some(s),
+        _ => None,
+    })
 }
 
 /// Czy domena ma MX i kto jest dostawcą poczty (po NS hostname'a MX).
@@ -536,15 +651,24 @@ pub fn mx_provider(dom: &str) -> (bool, String) {
         if let Record::Mx { exchange, .. } = r {
             let ex = exchange.to_lowercase();
             let known = [
-                ("google", "Google Workspace"), ("googlemail", "Google Workspace"),
-                ("outlook", "Microsoft 365"), ("protection.outlook", "Microsoft 365"),
-                ("mailgun", "Mailgun"), ("sendgrid", "SendGrid"),
-                ("zoho", "Zoho"), ("yandex", "Yandex"),
-                ("seznam", "Seznam"), ("ovh", "OVH"),
-                ("home.pl", "home.pl"), ("nazwa.pl", "nazwa.pl"),
-                ("domeny", "nazwa.pl"), ("sekundo", "Sekundo"),
-                ("mikrus", "Mikrus"), ("server", "self-host"),
-                ("poczta", "self-host"), ("mail", "self-host"),
+                ("google", "Google Workspace"),
+                ("googlemail", "Google Workspace"),
+                ("outlook", "Microsoft 365"),
+                ("protection.outlook", "Microsoft 365"),
+                ("mailgun", "Mailgun"),
+                ("sendgrid", "SendGrid"),
+                ("zoho", "Zoho"),
+                ("yandex", "Yandex"),
+                ("seznam", "Seznam"),
+                ("ovh", "OVH"),
+                ("home.pl", "home.pl"),
+                ("nazwa.pl", "nazwa.pl"),
+                ("domeny", "nazwa.pl"),
+                ("sekundo", "Sekundo"),
+                ("mikrus", "Mikrus"),
+                ("server", "self-host"),
+                ("poczta", "self-host"),
+                ("mail", "self-host"),
             ];
             for (k, v) in known {
                 if ex.contains(k) {
@@ -573,9 +697,15 @@ pub fn www_audit(dom: &str) -> Value {
     match resp {
         Ok(r) => {
             let hdrs = {
-                let names = ["strict-transport-security", "x-frame-options",
-                             "content-security-policy", "server", "x-powered-by"];
-                names.iter()
+                let names = [
+                    "strict-transport-security",
+                    "x-frame-options",
+                    "content-security-policy",
+                    "server",
+                    "x-powered-by",
+                ];
+                names
+                    .iter()
                     .filter_map(|n| r.header(n).map(|v| format!("{n}: {v}")))
                     .collect::<Vec<_>>()
             };
@@ -646,8 +776,16 @@ mod tests {
         assert_eq!(v["title"], "Szpital X");
         assert_eq!(v["generator"], "WordPress 6.0");
         assert_eq!(v["emails"].as_array().unwrap().len(), 2); // mailto + plain
-        assert!(v["phones"].as_array().unwrap().iter().any(|p| p == "+48911234567"));
-        assert!(v["persons"].as_array().unwrap().iter().any(|p| p == "jan.kowalski@sx.pl"));
+        assert!(v["phones"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|p| p == "+48911234567"));
+        assert!(v["persons"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|p| p == "jan.kowalski@sx.pl"));
     }
 
     #[test]

@@ -44,7 +44,8 @@ fn main() {
 }
 
 fn cmd_score(path: &str) {
-    let raw = std::fs::read_to_string(path).unwrap_or_else(|e| panic!("nie mogę czytać {path}: {e}"));
+    let raw =
+        std::fs::read_to_string(path).unwrap_or_else(|e| panic!("nie mogę czytać {path}: {e}"));
     let leads = score::load_json(&raw).unwrap_or_else(|e| panic!("JSON: {e}"));
     let (ranked, rep) = score::run(leads);
     println!("scryer: {}", rep.line());
@@ -54,12 +55,19 @@ fn cmd_score(path: &str) {
     std::fs::write(&out, csv).expect("zapis CSV");
     println!("CSV → {out}");
     for l in ranked.iter().take(10) {
-        println!("  [{:>3}] {:4} {:24} {}", l.score(), l.tier(), l.org, l.email);
+        println!(
+            "  [{:>3}] {:4} {:24} {}",
+            l.score(),
+            l.tier(),
+            l.org,
+            l.email
+        );
     }
 }
 
 fn cmd_briefs(path: &str, outdir: &str) {
-    let raw = std::fs::read_to_string(path).unwrap_or_else(|e| panic!("nie mogę czytać {path}: {e}"));
+    let raw =
+        std::fs::read_to_string(path).unwrap_or_else(|e| panic!("nie mogę czytać {path}: {e}"));
     let leads: Vec<Lead> = score::load_json(&raw).unwrap_or_else(|e| panic!("JSON: {e}"));
     let (ranked, rep) = score::run(leads);
     let server = std::env::var("SCRYER_DNS").unwrap_or_else(|_| "1.1.1.1".into());
@@ -70,8 +78,11 @@ fn cmd_briefs(path: &str, outdir: &str) {
     std::fs::create_dir_all(dir).expect("tworzenie katalogu");
 
     // snapshot JSON
-    store::write_json(&dir.join("snapshot.json"), &export::snapshot_json(&ranked, &audits))
-        .expect("zapis snapshot");
+    store::write_json(
+        &dir.join("snapshot.json"),
+        &export::snapshot_json(&ranked, &audits),
+    )
+    .expect("zapis snapshot");
     // briefy .md per lead
     let mut n = 0;
     for l in &ranked {
@@ -151,7 +162,10 @@ fn cmd_import(paths: &[String]) {
             }
         }
     }
-    println!("import: {total} podmiotów/kontaktów, {n_int} interakcji → {}", db_path().display());
+    println!(
+        "import: {total} podmiotów/kontaktów, {n_int} interakcji → {}",
+        db_path().display()
+    );
 }
 
 fn cmd_ask(q: &str) {
@@ -214,14 +228,14 @@ fn cmd_ask(q: &str) {
         }
         "stats" => {
             for t in ["podmiot", "domena", "osoba", "przetarg", "interakcja"] {
-                let n: i64 = o
-                    .count_table(t)
-                    .unwrap_or_else(|e| panic!("{e}"));
+                let n: i64 = o.count_table(t).unwrap_or_else(|e| panic!("{e}"));
                 println!("  {t}: {n}");
             }
         }
         other => {
-            eprintln!("nieznane zapytanie: {other}. Dostępne: hot-nodmarc | bez-kontaktu-30d | stats");
+            eprintln!(
+                "nieznane zapytanie: {other}. Dostępne: hot-nodmarc | bez-kontaktu-30d | stats"
+            );
             std::process::exit(2);
         }
     }
@@ -262,7 +276,12 @@ fn item_line(it: &serde_json::Value) -> String {
     } else if let Some(email) = it["email"].as_str() {
         format!("  ✉ {} — {}", email, it["temat"].as_str().unwrap_or(""))
     } else if let Some(tytul) = it["tytul"].as_str() {
-        format!("  [{}] {} — {}", it["score"].as_i64().unwrap_or(0), tytul, it["org"].as_str().unwrap_or(""))
+        format!(
+            "  [{}] {} — {}",
+            it["score"].as_i64().unwrap_or(0),
+            tytul,
+            it["org"].as_str().unwrap_or("")
+        )
     } else {
         it.to_string()
     }
@@ -327,7 +346,8 @@ fn cmd_viz() {
 }
 
 fn cmd_tenders(path: &str) {
-    let raw = std::fs::read_to_string(path).unwrap_or_else(|e| panic!("nie mogę czytać {path}: {e}"));
+    let raw =
+        std::fs::read_to_string(path).unwrap_or_else(|e| panic!("nie mogę czytać {path}: {e}"));
     let tenders = bzp::load(&raw).unwrap_or_else(|e| panic!("JSON: {e}"));
     let mut rows: Vec<(u32, &bzp::Tender, Vec<String>)> = tenders
         .iter()
@@ -342,7 +362,10 @@ fn cmd_tenders(path: &str) {
     let mut csv = String::from("SCORE;TIER;TITLE;ORG;DEADLINE;URL;REASONS\n");
     let mut shown = 0;
     for (sc, t, reasons) in &rows {
-        let tier = bzp::tier(&bzp::Match { score: *sc, reasons: Vec::new() });
+        let tier = bzp::tier(&bzp::Match {
+            score: *sc,
+            reasons: Vec::new(),
+        });
         if *sc >= 8 {
             println!("  [{:>2} {}] {} — {}", sc, tier, t.org, t.title);
             println!("        deadline: {} | {}", t.deadline, t.url);
@@ -365,7 +388,8 @@ fn cmd_tenders(path: &str) {
 }
 
 fn cmd_send(path: &str) {
-    let raw = std::fs::read_to_string(path).unwrap_or_else(|e| panic!("nie mogę czytać {path}: {e}"));
+    let raw =
+        std::fs::read_to_string(path).unwrap_or_else(|e| panic!("nie mogę czytać {path}: {e}"));
     let leads: Vec<Lead> = score::load_json(&raw).unwrap_or_else(|e| panic!("JSON: {e}"));
     let (ranked, rep) = score::run(leads);
     println!("scryer: {} — kampania (top {})", rep.line(), ranked.len());

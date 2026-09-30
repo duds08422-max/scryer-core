@@ -10,7 +10,9 @@ use crate::ontology::Ontology;
 use std::io::Write;
 
 fn esc_json(s: &str) -> String {
-    s.replace('\\', "\\\\").replace('"', "\\\"").replace('\n', " ")
+    s.replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', " ")
 }
 
 const SECTOR_COLOR: &[(&str, &str)] = &[
@@ -54,7 +56,9 @@ pub fn export_html(o: &Ontology, path: &str) -> Result<usize, String> {
             ))
         })
         .map_err(|e| e.to_string())?;
-    let podmioty: Vec<_> = rows.collect::<rusqlite::Result<Vec<_>>>().map_err(|e| e.to_string())?;
+    let podmioty: Vec<_> = rows
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .map_err(|e| e.to_string())?;
 
     // domeny → podmiot
     let mut stmt2 = conn
@@ -108,18 +112,33 @@ pub fn export_html(o: &Ontology, path: &str) -> Result<usize, String> {
 
     let mut edges = String::new();
     for (nazwa, pid, _mx, dmarc) in &domeny {
-        let color = if dmarc.is_empty() { "#e5484d" } else { "#64748b" };
+        let color = if dmarc.is_empty() {
+            "#e5484d"
+        } else {
+            "#64748b"
+        };
         edges.push_str(&format!(
             "{{from: {}, to: {}, color: {{color: \"{}\"}}}},\n",
             pid + 100000,
-            100000 + domeny.iter().position(|d| d.0 == *nazwa).map(|i| i as i64 + 1).unwrap_or(0),
+            100000
+                + domeny
+                    .iter()
+                    .position(|d| d.0 == *nazwa)
+                    .map(|i| i as i64 + 1)
+                    .unwrap_or(0),
             color
         ));
     }
     // domeny jako węzły (małe kwadraty)
     let mut dom_nodes = String::new();
     for (nazwa, _pid, mx, dmarc) in &domeny {
-        let col = if *mx == 0 { "#334155" } else if dmarc.is_empty() { "#e5484d" } else { "#64748b" };
+        let col = if *mx == 0 {
+            "#334155"
+        } else if dmarc.is_empty() {
+            "#e5484d"
+        } else {
+            "#64748b"
+        };
         let label_j = format!("\"{}\"", esc_json(nazwa));
         dom_nodes.push_str(&format!(
             "{{id: {}, label: {label_j}, shape: \"box\", size: 6, color: {{background: \"#0f1420\", border: \"{col}\"}}, font: {{size: 9, color: \"#8b93a7\"}}}},\n",

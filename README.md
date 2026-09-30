@@ -8,7 +8,7 @@ briefami mailowymi.
 
 ## Zasady
 
-1. **Code over claims** — 24 testy jednostkowe, parser DNS testowany na
+1. **Code over claims** — 62 testy jednostkowe, parser DNS testowany na
    zamrożonych bajtach (frozen fixtures) z prawdziwych odpowiedzi.
 2. **Pasywnie domyślnie** — tylko publiczny DNS (równoważne zwykłemu
    resolverowi) i dane publiczne. Aktywny skan osób trzecich = nigdy bez
@@ -39,6 +39,13 @@ scryer-core briefs seed/leads-demo.json briefs/
 
 # serwer DNS konfigurowalny (default 1.1.1.1):
 SCRYER_DNS=9.9.9.9 scryer-core briefs seed/leads-demo.json briefs/
+
+# konsola + API (domyślnie 127.0.0.1):
+SCRYER_DB=seed/scryer.db scryer-core serve
+
+# auth na API — OBOWIĄZKOWE przy wystawianiu poza localhost (SCRYER_HOST=0.0.0.0):
+SCRYER_TOKEN="$(openssl rand -hex 32)" SCRYER_DB=seed/scryer.db scryer-core serve
+# konsola zapyta o token przy pierwszym 401; API: Authorization: Bearer <token>
 ```
 
 ## Scoring (przezroczysty, audit-ready)

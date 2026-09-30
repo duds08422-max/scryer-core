@@ -9,7 +9,6 @@
 //!   * parsujemy: A, CNAME, MX, TXT, NS; reszta zwracana jako „unsupported",
 //!   * obsługa kompresji wskaźnikowej (0xC0) w nazwach.
 
-
 use std::net::UdpSocket;
 use std::time::Duration;
 
@@ -33,7 +32,11 @@ impl Record {
             Record::Mx { pref, exchange } => format!("MX {pref} {exchange}"),
             Record::Txt(s) => {
                 let s = s.clone();
-                if s.len() > 60 { format!("TXT {}…", &s[..60]) } else { format!("TXT \"{s}\"") }
+                if s.len() > 60 {
+                    format!("TXT {}…", &s[..60])
+                } else {
+                    format!("TXT \"{s}\"")
+                }
             }
             Record::Ns(n) => format!("NS {n}"),
             Record::Other(t) => format!("type{t}"),
@@ -121,16 +124,23 @@ impl<'a> Cursor<'a> {
             let len = *self.buf.get(pos).ok_or(DnsError::Truncated)?;
             if len == 0 {
                 pos += 1;
-                if !jumped { end = pos; }
+                if !jumped {
+                    end = pos;
+                }
                 break;
             }
             if len & 0xC0 == 0xC0 {
-                if jumps >= 32 { return Err(DnsError::BadPointer); }
+                if jumps >= 32 {
+                    return Err(DnsError::BadPointer);
+                }
                 jumps += 1;
                 let hi = len as u16 & 0x3F;
                 let lo = *self.buf.get(pos + 1).ok_or(DnsError::Truncated)? as u16;
                 let ptr = ((hi << 8) | lo) as usize;
-                if !jumped { end = pos + 2; jumped = true; }
+                if !jumped {
+                    end = pos + 2;
+                    jumped = true;
+                }
                 pos = ptr;
                 continue;
             }
@@ -199,7 +209,9 @@ pub fn parse_response(data: &[u8]) -> Result<Answer, DnsError> {
                 let mut i = 0;
                 while i < rd.len() {
                     let l = rd[i] as usize;
-                    if i + 1 + l > rd.len() { break; }
+                    if i + 1 + l > rd.len() {
+                        break;
+                    }
                     s.push_str(&String::from_utf8_lossy(&rd[i + 1..i + 1 + l]));
                     i += 1 + l;
                 }
@@ -225,7 +237,9 @@ pub fn build_query(name: &str, qtype: u16, id: u16) -> Vec<u8> {
     out.extend_from_slice(&0x0100u16.to_be_bytes()); // RD=1
     out.extend_from_slice(&[0, 1, 0, 0, 0, 0, 0, 0]); // qd=1
     for label in name.split('.') {
-        if label.is_empty() { continue; }
+        if label.is_empty() {
+            continue;
+        }
         out.push(label.len() as u8);
         out.extend_from_slice(label.as_bytes());
     }
@@ -262,24 +276,25 @@ mod tests {
     /// answer pusta (an=0), SOA w authority (analitycznie poprawna odpowiedź NX-ish
     /// dla brakującego wtedy rekordu). Testuje: parsowanie SOA-other + brak panic.
     const FROZEN_TXT_DMARC: &[u8] = &[
-        0xa1, 0x59, 0x81, 0x83, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x06, 0x5f, 0x64, 0x6d,
-        0x61, 0x72, 0x63, 0x0d, 0x68, 0x61, 0x72, 0x74, 0x77, 0x65, 0x6c, 0x6c, 0x2d, 0x6c, 0x61, 0x62,
-        0x73, 0x02, 0x70, 0x6c, 0x00, 0x00, 0x10, 0x00, 0x01, 0xc0, 0x13, 0x00, 0x06, 0x00, 0x01, 0x00,
-        0x00, 0x0e, 0x10, 0x00, 0x28, 0x03, 0x6e, 0x73, 0x31, 0x05, 0x6e, 0x61, 0x7a, 0x77, 0x61, 0xc0,
-        0x21, 0x05, 0x62, 0x69, 0x75, 0x72, 0x6f, 0xc0, 0x39, 0x77, 0xb1, 0xae, 0x78, 0x00, 0x00, 0x70,
-        0x80, 0x00, 0x00, 0x1c, 0x20, 0x00, 0x09, 0x3a, 0x80, 0x00, 0x01, 0x51, 0x80,
+        0xa1, 0x59, 0x81, 0x83, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x06, 0x5f, 0x64,
+        0x6d, 0x61, 0x72, 0x63, 0x0d, 0x68, 0x61, 0x72, 0x74, 0x77, 0x65, 0x6c, 0x6c, 0x2d, 0x6c,
+        0x61, 0x62, 0x73, 0x02, 0x70, 0x6c, 0x00, 0x00, 0x10, 0x00, 0x01, 0xc0, 0x13, 0x00, 0x06,
+        0x00, 0x01, 0x00, 0x00, 0x0e, 0x10, 0x00, 0x28, 0x03, 0x6e, 0x73, 0x31, 0x05, 0x6e, 0x61,
+        0x7a, 0x77, 0x61, 0xc0, 0x21, 0x05, 0x62, 0x69, 0x75, 0x72, 0x6f, 0xc0, 0x39, 0x77, 0xb1,
+        0xae, 0x78, 0x00, 0x00, 0x70, 0x80, 0x00, 0x00, 0x1c, 0x20, 0x00, 0x09, 0x3a, 0x80, 0x00,
+        0x01, 0x51, 0x80,
     ];
 
     /// Zamrożona odpowiedź MX dla hartwell-labs.pl (101 B; w momencie nagrania
     /// self-MX już zniknął — odpowiedź NOERROR an=0 + SOA w authority).
     const FROZEN_MX_APEX: &[u8] = &[
-        0x2a, 0x2f, 0x81, 0x80, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x0d, 0x68, 0x61, 0x72,
-        0x74, 0x77, 0x65, 0x6c, 0x6c, 0x2d, 0x6c, 0x61, 0x62, 0x73, 0x02, 0x70, 0x6c, 0x00, 0x00, 0x0f,
-        0x00, 0x01, 0xc0, 0x0c, 0x00, 0x06, 0x00, 0x01, 0x00, 0x00, 0x07, 0x08, 0x00, 0x37, 0x09, 0x61,
-        0x6c, 0x65, 0x78, 0x61, 0x6e, 0x64, 0x72, 0x61, 0x02, 0x6e, 0x73, 0x0a, 0x63, 0x6c, 0x6f, 0x75,
-        0x64, 0x66, 0x6c, 0x61, 0x72, 0x65, 0x03, 0x63, 0x6f, 0x6d, 0x00, 0x03, 0x64, 0x6e, 0x73, 0xc0,
-        0x3b, 0x90, 0x02, 0xf3, 0xf2, 0x00, 0x00, 0x27, 0x10, 0x00, 0x00, 0x09, 0x60, 0x00, 0x09, 0x3a,
-        0x80, 0x00, 0x00, 0x07, 0x08,
+        0x2a, 0x2f, 0x81, 0x80, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x0d, 0x68, 0x61,
+        0x72, 0x74, 0x77, 0x65, 0x6c, 0x6c, 0x2d, 0x6c, 0x61, 0x62, 0x73, 0x02, 0x70, 0x6c, 0x00,
+        0x00, 0x0f, 0x00, 0x01, 0xc0, 0x0c, 0x00, 0x06, 0x00, 0x01, 0x00, 0x00, 0x07, 0x08, 0x00,
+        0x37, 0x09, 0x61, 0x6c, 0x65, 0x78, 0x61, 0x6e, 0x64, 0x72, 0x61, 0x02, 0x6e, 0x73, 0x0a,
+        0x63, 0x6c, 0x6f, 0x75, 0x64, 0x66, 0x6c, 0x61, 0x72, 0x65, 0x03, 0x63, 0x6f, 0x6d, 0x00,
+        0x03, 0x64, 0x6e, 0x73, 0xc0, 0x3b, 0x90, 0x02, 0xf3, 0xf2, 0x00, 0x00, 0x27, 0x10, 0x00,
+        0x00, 0x09, 0x60, 0x00, 0x09, 0x3a, 0x80, 0x00, 0x00, 0x07, 0x08,
     ];
 
     #[test]
@@ -302,9 +317,9 @@ mod tests {
         let q = build_query("example.com", 1, 0x1234);
         assert_eq!(&q[0..2], &[0x12, 0x34]); // id
         assert_eq!(&q[2..4], &[0x01, 0x00]); // flags RD
-        // nazwa: \x07"example"\x03"com"\x00 → bajty 12..=24
+                                             // nazwa: \x07"example"\x03"com"\x00 → bajty 12..=24
         assert_eq!(&q[12..20], b"\x07example".as_slice()); // 1+7 bajtów
-        assert_eq!(&q[20..24], b"\x03com".as_slice());      // 1+3 bajty
+        assert_eq!(&q[20..24], b"\x03com".as_slice()); // 1+3 bajty
         assert_eq!(q[24], 0); // terminator nazwy
         assert_eq!(&q[25..27], &[0, 1]); // type A
         assert_eq!(&q[27..29], &[0, 1]); // IN
@@ -316,10 +331,16 @@ mod tests {
         // obcinamy wewnątrz rdlen/rd = Truncated; ważne zero panic na każdym cięciu
         for cut in [43usize, 50, 55, 60, 80, 95] {
             let r = parse_response(&FROZEN_MX_APEX[..cut.min(FROZEN_MX_APEX.len())]);
-            assert!(r.is_ok() || matches!(r, Err(DnsError::Truncated) | Err(DnsError::BadPointer)), "cut={cut}");
+            assert!(
+                r.is_ok() || matches!(r, Err(DnsError::Truncated) | Err(DnsError::BadPointer)),
+                "cut={cut}"
+            );
         }
         // obcięty nagłówek → Truncated
-        assert!(matches!(parse_response(&FROZEN_MX_APEX[..10]), Err(DnsError::Truncated)));
+        assert!(matches!(
+            parse_response(&FROZEN_MX_APEX[..10]),
+            Err(DnsError::Truncated)
+        ));
     }
 
     #[test]
@@ -328,21 +349,28 @@ mod tests {
         let mut evil = vec![0u8; 12 + 17 + 12];
         evil[3] = 0x80; // rcode=0, an=1
         evil[7] = 1; // ancount=1
-        // question: "a.b" type A
+                     // question: "a.b" type A
         let mut off = 12;
-        evil[off] = 1; evil[off + 1] = b'a'; off += 2;
-        evil[off] = 1; evil[off + 1] = b'b'; off += 2;
-        evil[off] = 0; off += 1;
+        evil[off] = 1;
+        evil[off + 1] = b'a';
+        off += 2;
+        evil[off] = 1;
+        evil[off + 1] = b'b';
+        off += 2;
+        evil[off] = 0;
+        off += 1;
         evil[off..off + 4].copy_from_slice(&[0, 1, 0, 1]);
         off += 4;
         // answer owner: pointer na sam siebie (0xC0 0x0C = offset 12 = początek nazwy question)
-        evil[off] = 0xC0; evil[off + 1] = 0x0C; off += 2;
+        evil[off] = 0xC0;
+        evil[off + 1] = 0x0C;
+        off += 2;
         evil[off..off + 8].copy_from_slice(&[0, 1, 0, 1, 0, 0, 0, 0]); // type A, IN, ttl
         off += 8;
         evil[off..off + 2].copy_from_slice(&[0, 0]); // rdlen=0
-        // pointer 0xC0 0x0C w ownerze wskazuje na question (nie tworzy pętli), ale
-        // zbudujmy pętlę: pointer na własny offset — budowa: (skrócona wersja: rdlen=0
-        // nie daje nazwy, więc pętla pointerów testowana jest przez name() w ownerze)
+                                                     // pointer 0xC0 0x0C w ownerze wskazuje na question (nie tworzy pętli), ale
+                                                     // zbudujmy pętlę: pointer na własny offset — budowa: (skrócona wersja: rdlen=0
+                                                     // nie daje nazwy, więc pętla pointerów testowana jest przez name() w ownerze)
         let r = parse_response(&evil);
         assert!(r.is_ok() || r.is_err()); // definicja: zero panic
     }
@@ -363,7 +391,11 @@ mod tests {
     fn summary_krotkie() {
         assert_eq!(Record::A("1.2.3.4".parse().unwrap()).summary(), "A 1.2.3.4");
         assert_eq!(
-            Record::Mx { pref: 10, exchange: "mx.example.pl".into() }.summary(),
+            Record::Mx {
+                pref: 10,
+                exchange: "mx.example.pl".into()
+            }
+            .summary(),
             "MX 10 mx.example.pl"
         );
     }

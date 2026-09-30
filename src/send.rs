@@ -42,7 +42,8 @@ impl SendConfig {
     pub fn from_env() -> Self {
         Self {
             api_key: std::env::var("SCRYER_RESEND_KEY").unwrap_or_default(),
-            from: std::env::var("SCRYER_FROM").unwrap_or_else(|_| "contact@hartwell-labs.pl".into()),
+            from: std::env::var("SCRYER_FROM")
+                .unwrap_or_else(|_| "contact@hartwell-labs.pl".into()),
             confirm: std::env::var("SCRYER_CONFIRM").as_deref() == Ok("yes"),
             daily_limit: std::env::var("SCRYER_DAILY_LIMIT")
                 .ok()
@@ -104,18 +105,22 @@ wyszło w pasywnym audycie domeny.\n"
 eksfiltrację na poziomie jądra (eBPF) i automatycznie zatrzymuje proces ataku — bez chmury, \
 bez telemetrii, bez modułów jądra. Licencja i aktualizacje w pełni offline. Montowany na \
 stacjach operatorowych, serwerach dyspozytorskich SCADA i stacjach roboczych inżynierów — \
-tam, gdzie segment OT nie może widzieć internetu.\n\n".to_string(),
+tam, gdzie segment OT nie może widzieć internetu.\n\n"
+            .to_string(),
         crate::model::Sector::Energy => "Talus CI to agent dla Linuksa, który wykrywa ransomware \
 i eksfiltrację na poziomie jądra (eBPF) i automatycznie zatrzymuje proces ataku — bez chmury, \
 bez telemetrii. Licencja i aktualizacje w pełni offline. Celuje w stacje operatorowe i serwery \
-dyspozytorskie w segmentach OT, gdzie dostęp z internetu jest wykluczony.\n\n".to_string(),
+dyspozytorskie w segmentach OT, gdzie dostęp z internetu jest wykluczony.\n\n"
+            .to_string(),
         crate::model::Sector::PublicAdmin => "Talus CI to agent dla Linuksa, który wykrywa \
 ransomware i eksfiltrację na poziomie jądra (eBPF) i automatycznie zatrzymuje proces ataku — \
 bez chmury, bez telemetrii. Licencja i aktualizacje w pełni offline. Chroni serwery \
-aplikacyjne i stacje robocze z danymi mieszkańców, tam gdzie chmura nie wchodzi w grę.\n\n".to_string(),
+aplikacyjne i stacje robocze z danymi mieszkańców, tam gdzie chmura nie wchodzi w grę.\n\n"
+            .to_string(),
         _ => "Talus CI to agent bezpieczeństwa dla Linuksa, który wykrywa ransomware i \
 eksfiltrację na poziomie jądra (eBPF) i automatycznie zatrzymuje proces ataku — bez chmury, \
-bez telemetrii, bez modułów jądra. Licencja i aktualizacje działają w pełni offline.\n\n".to_string(),
+bez telemetrii, bez modułów jądra. Licencja i aktualizacje działają w pełni offline.\n\n"
+            .to_string(),
     };
     let body = format!(
         "Dzień dobry,\n\npiszę krótko, bo przed 3 października {short} składa wniosek o wpis do \
@@ -168,7 +173,12 @@ pub fn load_suppressed(outbox_path: &str) -> HashSet<String> {
 }
 
 /// Wysyłka jednego maila przez Resend; zwraca message-id albo błąd.
-pub fn send_one(cfg: &SendConfig, to_email: &str, subject: &str, body: &str) -> Result<String, String> {
+pub fn send_one(
+    cfg: &SendConfig,
+    to_email: &str,
+    subject: &str,
+    body: &str,
+) -> Result<String, String> {
     let payload = serde_json::json!({
         "from": cfg.from,
         "to": [to_email],
