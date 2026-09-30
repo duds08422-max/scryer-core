@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>SCRYER — ontologia</title>
+<title>SCRYER — OSINT</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23060a12'/%3E%3Ccircle cx='16' cy='16' r='8' fill='none' stroke='%2335e0a1' stroke-width='1.5' opacity='.9'/%3E%3Ccircle cx='16' cy='16' r='3' fill='%2335e0a1'/%3E%3Cpath d='M16 4v5M16 23v5M4 16h5M23 16h5' stroke='%2335e0a1' stroke-width='1.5'/%3E%3C/svg%3E">
 <style>
   :root {
@@ -28,21 +28,13 @@
   ::selection { background: rgba(53,224,161,.25); }
   ::-webkit-scrollbar { width: 8px; height: 8px; }
   ::-webkit-scrollbar-thumb { background: #1c2a44; border-radius: 4px; }
-  ::-webkit-scrollbar-thumb:hover { background: #2a3d61; }
   ::-webkit-scrollbar-corner { background: transparent; }
   a { color: var(--cy); text-decoration: none; }
   a:hover { text-decoration: underline; text-underline-offset: 3px; }
   button { font: inherit; cursor: pointer; background: none; border: none; color: inherit; }
-  kbd {
-    background: var(--bg3); border: 1px solid var(--line3); border-bottom-width: 2px;
-    border-radius: 3px; padding: 0 4px; font-size: 10px; color: var(--tx1);
-  }
-  code { color: var(--cy); font-size: 11px; }
+  kbd { background: var(--bg3); border: 1px solid var(--line3); border-bottom-width: 2px; border-radius: 3px; padding: 0 4px; font-size: 10px; color: var(--tx1); }
 
-  /* tooltip renderuje silnik grafu (własny div); stary vis-tooltip martwy */
-  div.vis-tooltip { display: none !important; }
-
-  /* ═══════════════ TOPBAR ═══════════════ */
+  /* ══════════ TOPBAR ══════════ */
   header {
     display: flex; align-items: stretch; height: 46px; flex-shrink: 0;
     background: linear-gradient(180deg, #0d1524, #080d16);
@@ -56,22 +48,13 @@
   .brand .word { font-weight: 700; font-size: 14px; letter-spacing: 5px; color: var(--tx0); }
   .brand .word em { color: var(--acc); font-style: normal; }
   .brand .ver { font-size: 9px; color: var(--tx3); letter-spacing: 1px; align-self: flex-start; margin-top: 9px; }
-
-  #stats { display: flex; align-items: stretch; flex: 1; min-width: 0; overflow-x: auto; scrollbar-width: none; }
-  #stats::-webkit-scrollbar { display: none; }
-  .stat {
-    display: flex; flex-direction: column; justify-content: center; gap: 1px;
-    padding: 0 14px; border-right: 1px solid var(--line); min-width: 74px; position: relative;
+  #db-count {
+    display: flex; align-items: center; padding: 0 16px; font-size: 11px;
+    color: var(--tx2); letter-spacing: .5px; border-right: 1px solid var(--line);
+    font-variant-numeric: tabular-nums; flex: 1; min-width: 0; overflow: hidden; white-space: nowrap;
   }
-  .stat .v { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -.5px; }
-  .stat .k { font-size: 8.5px; text-transform: uppercase; letter-spacing: 1.6px; color: var(--tx2); }
-  .stat .v { color: var(--tx0); }
-  .stat.acc .v { color: var(--acc); } .stat.acc .k { color: rgba(53,224,161,.55); }
-  .stat.hot .v { color: var(--hot); } .stat.hot .k { color: rgba(255,125,92,.55); }
-  .stat.bad .v { color: var(--bad); } .stat.bad .k { color: rgba(255,84,112,.55); }
-  .stat.warn .v { color: var(--warn); }
-
-  .topright { display: flex; align-items: center; gap: 0; border-left: 1px solid var(--line); }
+  #db-count b { color: var(--tx1); font-weight: 500; }
+  .topright { display: flex; align-items: stretch; }
   .clock {
     padding: 0 14px; font-size: 11px; color: var(--tx2); letter-spacing: 1px;
     font-variant-numeric: tabular-nums; border-right: 1px solid var(--line); display: flex; align-items: center; gap: 7px;
@@ -85,16 +68,16 @@
   #refresh { padding: 0 16px; color: var(--tx2); border-left: 1px solid var(--line); transition: all .15s; font-size: 11px; letter-spacing: 1px; }
   #refresh:hover { color: var(--acc); background: var(--acc2); }
 
-  /* ═══════════════ TABS ═══════════════ */
+  /* ══════════ TABS (tylko 2) ══════════ */
   nav { display: flex; align-items: stretch; height: 34px; padding: 0 8px; background: var(--bg1); border-bottom: 1px solid var(--line); flex-shrink: 0; }
   nav button {
-    position: relative; padding: 0 18px; color: var(--tx2); font-size: 11px;
+    position: relative; padding: 0 22px; color: var(--tx2); font-size: 11px;
     letter-spacing: 1.2px; text-transform: uppercase; transition: color .15s;
     display: flex; align-items: center; gap: 7px;
   }
   nav button:hover { color: var(--tx0); }
   nav button.on { color: var(--acc); }
-  nav button.on::after { content: ""; position: absolute; left: 12px; right: 12px; bottom: -1px; height: 2px; background: var(--acc); box-shadow: 0 0 8px var(--acc); }
+  nav button.on::after { content: ""; position: absolute; left: 14px; right: 14px; bottom: -1px; height: 2px; background: var(--acc); box-shadow: 0 0 8px var(--acc); }
   nav .badge {
     font-size: 9px; padding: 1px 5px; border-radius: 3px; min-width: 16px; text-align: center;
     background: var(--bg3); color: var(--tx2); border: 1px solid var(--line2); font-variant-numeric: tabular-nums;
@@ -102,149 +85,103 @@
   nav button.on .badge { color: var(--acc); border-color: rgba(53,224,161,.3); background: var(--acc2); }
 
   main { flex: 1; display: flex; min-height: 0; }
+  .view { flex: 1; display: none; min-height: 0; }
+  .view.on { display: flex; flex-direction: column; }
 
-  /* ═══════════════ LEFT LIST ═══════════════ */
-  #list-pane { width: 470px; min-width: 340px; display: flex; flex-direction: column; border-right: 1px solid var(--line3); flex-shrink: 0; background: var(--bg1); }
-  .pane-label {
-    display: flex; align-items: center; gap: 8px; padding: 8px 14px;
-    font-size: 9px; letter-spacing: 2px; text-transform: uppercase; color: var(--tx2);
-    border-bottom: 1px solid var(--line); background: var(--bg2);
-  }
-  .pane-label::before { content: ""; width: 6px; height: 6px; background: var(--acc); clip-path: polygon(0 0, 100% 50%, 0 100%); }
-  .pane-label .right { margin-left: auto; letter-spacing: .5px; color: var(--tx3); }
-
-  #filters { display: flex; gap: 6px; padding: 9px 12px; border-bottom: 1px solid var(--line); flex-wrap: wrap; background: var(--bg1); }
-  .inp {
-    background: var(--bg0); border: 1px solid var(--line2); color: var(--tx0);
-    font: 12px var(--mono); padding: 6px 9px; border-radius: 4px; outline: none;
+  /* ══════════ SZUKAJ ══════════ */
+  #s-bar { display: flex; gap: 10px; padding: 26px 16px 12px; align-items: center; border-bottom: 1px solid var(--line); }
+  #s-tag { color: var(--acc); font-size: 11px; letter-spacing: 2px; white-space: nowrap; }
+  #s-in {
+    flex: 1; background: var(--bg0); border: 1px solid var(--line2); color: var(--tx0);
+    font: 13.5px var(--mono); padding: 10px 13px; border-radius: 4px; outline: none;
     transition: border-color .15s, box-shadow .15s;
   }
-  .inp::placeholder { color: var(--tx3); }
-  .inp:focus { border-color: var(--acc); box-shadow: 0 0 0 1px rgba(53,224,161,.25); }
-  select.inp { padding: 6px 4px; cursor: pointer; }
-  select.inp option { background: var(--bg2); }
-  #q { flex: 1; min-width: 150px; }
-
-  #list-meta { padding: 5px 14px; color: var(--tx2); font-size: 10px; letter-spacing: .8px; text-transform: uppercase; border-bottom: 1px solid var(--line); background: var(--bg1); }
-  #list-meta b { color: var(--acc); font-weight: 600; }
-
-  #rows { overflow-y: auto; flex: 1; }
-  #rows table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-  th {
-    position: sticky; top: 0; z-index: 2; background: var(--bg2); color: var(--tx2);
-    font-size: 9px; text-transform: uppercase; letter-spacing: 1.4px; font-weight: 500;
-    text-align: left; padding: 6px 8px; user-select: none; border-bottom: 1px solid var(--line3);
+  #s-in::placeholder { color: var(--tx3); }
+  #s-in:focus { border-color: var(--acc); box-shadow: 0 0 0 1px rgba(53,224,161,.25); }
+  .gbtn {
+    background: var(--bg3); border: 1px solid var(--line2); color: var(--tx1);
+    padding: 6px 12px; border-radius: 4px; font-size: 10.5px; letter-spacing: .5px; white-space: nowrap;
   }
-  th[data-sort]:hover { color: var(--cy); cursor: pointer; }
-  th.c-sc, th.c-pop, th.c-mail { width: 50px; }
-  th.c-sektor { width: 92px; }
-  th.c-miasto { width: 104px; }
-  td { padding: 6px 8px; border-bottom: 1px solid var(--line); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--tx1); }
-  tr.row { cursor: pointer; transition: background .1s; box-shadow: inset 2px 0 0 transparent; }
-  tr.row:hover { background: var(--bg3); box-shadow: inset 2px 0 0 var(--cy); }
-  tr.row.open { background: var(--bg4); box-shadow: inset 2px 0 0 var(--acc); }
-  tr.row.open td { color: var(--tx0); }
-  td.c-name { color: var(--tx0); }
-
+  .gbtn:hover { color: var(--acc); border-color: rgba(53,224,161,.4); }
+  .btn {
+    background: var(--bg3); border: 1px solid var(--line2); color: var(--tx1);
+    padding: 8px 16px; border-radius: 4px; font-size: 11.5px; letter-spacing: .5px; transition: all .13s; white-space: nowrap;
+  }
+  .btn:hover { border-color: var(--line3); color: var(--tx0); background: var(--bg4); }
+  #s-run { color: var(--acc); border-color: rgba(53,224,161,.35); background: var(--acc2); }
+  #s-run:hover { box-shadow: 0 0 10px rgba(53,224,161,.2); border-color: var(--acc); }
+  #s-said {
+    display: none; padding: 9px 16px; font-size: 11.5px; color: var(--tx1);
+    border-bottom: 1px solid var(--line); background: var(--bg1);
+  }
+  #s-out { flex: 1; overflow: auto; padding: 6px 0 20px; }
+  .sec-label {
+    display: flex; gap: 8px; align-items: center; padding: 14px 16px 6px;
+    font-size: 9.5px; letter-spacing: 2px; text-transform: uppercase; color: var(--tx2);
+  }
+  .sec-label::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+  .hit {
+    display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap;
+    padding: 10px 16px; border-bottom: 1px solid var(--line); transition: background .1s;
+  }
+  .hit:hover { background: var(--bg2); }
+  .hit .t { color: var(--tx0); font-size: 13px; }
+  .hit .d { color: var(--cy); font-size: 11.5px; }
+  .hit .u { color: var(--tx3); font-size: 10px; width: 100%; padding-left: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hit .acts { margin-left: auto; display: flex; gap: 6px; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 4px; padding: 1px 7px; border-radius: 3px;
+    font-size: 9.5px; letter-spacing: .8px; text-transform: uppercase; border: 1px solid transparent;
+  }
+  .p-ok  { background: var(--acc2); color: var(--acc); border-color: rgba(53,224,161,.3); }
+  .p-bad { background: var(--bad2); color: var(--bad); border-color: rgba(255,84,112,.3); }
+  .p-dim { background: var(--bg3); color: var(--tx2); border-color: var(--line2); }
+  .kv { display: grid; grid-template-columns: 110px 1fr; gap: 2px 10px; font-size: 11.5px; }
+  .kv .k { color: var(--tx2); text-transform: uppercase; font-size: 9.5px; letter-spacing: 1px; padding-top: 2px; }
+  .kv .v2 { color: var(--tx1); overflow-wrap: anywhere; }
+  .lrow { padding: 6px 16px; border-bottom: 1px solid var(--line); font-size: 12px; display: flex; gap: 10px; align-items: baseline; }
+  .lrow:hover { background: var(--bg2); }
   .score {
     display: inline-flex; align-items: center; justify-content: center; min-width: 32px; height: 18px;
     border-radius: 3px; font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums;
-    border: 1px solid transparent;
+    border: 1px solid transparent; flex-shrink: 0;
   }
   .s-hot  { background: var(--hot2); color: var(--hot); border-color: rgba(255,125,92,.35); }
   .s-warm { background: var(--warn2); color: var(--warn); border-color: rgba(240,182,78,.3); }
   .s-cold { background: var(--cy2); color: var(--cy); border-color: rgba(85,200,255,.25); }
   .s-zero { background: var(--bg3); color: var(--tx2); border-color: var(--line2); }
-
   .sektor-dot { display: inline-block; width: 7px; height: 7px; border-radius: 2px; margin-right: 6px; }
-  .mailed { color: var(--acc); font-size: 11px; }
-  .nomail { color: var(--tx3); }
 
-  /* ═══════════════ CENTER ═══════════════ */
-  #center { flex: 1; display: flex; flex-direction: column; min-width: 0; }
-  .view { flex: 1; display: none; min-height: 0; }
-  .view.on { display: flex; flex-direction: column; }
-
+  /* ══════════ GRAF ══════════ */
   #graph {
     flex: 1; position: relative; min-width: 0; min-height: 0;
     background:
-      radial-gradient(ellipse at 50% 40%, rgba(21,33,56,.55), transparent 70%),
-      radial-gradient(rgba(90,120,180,.13) 1px, transparent 1px);
-    background-size: auto, 22px 22px;
+      radial-gradient(ellipse at 50% 40%, rgba(21,33,56,.5), transparent 70%),
+      radial-gradient(rgba(90,120,180,.10) 1px, transparent 1px);
+    background-size: auto, 24px 24px;
   }
   #g-diag {
     position: absolute; top: 12px; right: 14px; z-index: 6; pointer-events: none;
-    font-size: 10px; line-height: 1.7; text-align: right; max-width: 360px;
+    font-size: 10px; line-height: 1.7; text-align: right; max-width: 340px;
     color: var(--tx2); text-shadow: 0 1px 2px #000;
   }
-  .gbtn {
-    background: var(--bg3); border: 1px solid var(--line2); color: var(--tx1);
-    padding: 3px 10px; border-radius: 4px; font-size: 10px; letter-spacing: .5px;
+  #g-empty {
+    position: absolute; inset: 0; z-index: 3; pointer-events: none;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+    color: var(--tx3); font-size: 11.5px; letter-spacing: 1px; text-align: center; padding: 0 40px;
   }
-  .gbtn:hover { color: var(--acc); border-color: rgba(53,224,161,.4); }
-  #graph-msg {
-    position: absolute; top: 14px; left: 16px; z-index: 5; color: var(--acc);
-    background: rgba(8,13,22,.9); border: 1px solid rgba(53,224,161,.3);
-    padding: 5px 12px; border-radius: 4px; font-size: 11px; letter-spacing: .5px;
-    backdrop-filter: blur(6px);
-  }
-  #graph-msg::before { content: "▍"; animation: blink 1s steps(1) infinite; margin-right: 6px; }
-  @keyframes blink { 50% { opacity: 0; } }
-  .scanline {
-    position: absolute; left: 0; right: 0; height: 2px; z-index: 4; pointer-events: none;
-    background: linear-gradient(90deg, transparent, rgba(53,224,161,.5), transparent);
-    animation: scan 2.2s linear infinite;
-  }
-  @keyframes scan { 0% { top: 0; } 100% { top: 100%; } }
-
+  #g-empty::before { content: "◌"; font-size: 30px; opacity: .5; }
+  #g-empty b { color: var(--tx2); font-weight: 500; }
   .g-ctl {
     display: flex; gap: 16px; align-items: center; padding: 0 16px; height: 38px;
     background: var(--bg1); border-top: 1px solid var(--line3); flex-wrap: wrap;
   }
-  .tgl { display: flex; gap: 14px; }
-  .switch { display: flex; align-items: center; gap: 7px; cursor: pointer; user-select: none; color: var(--tx2); font-size: 11px; letter-spacing: .5px; transition: color .15s; }
-  .switch:hover { color: var(--tx0); }
-  .switch input { display: none; }
-  .switch .track {
-    width: 26px; height: 14px; border-radius: 7px; background: var(--bg3);
-    border: 1px solid var(--line3); position: relative; transition: all .18s;
-  }
-  .switch .track::after {
-    content: ""; position: absolute; top: 1px; left: 1px; width: 10px; height: 10px;
-    border-radius: 50%; background: var(--tx2); transition: all .18s;
-  }
-  .switch input:checked + .track { background: var(--acc2); border-color: rgba(53,224,161,.5); }
-  .switch input:checked + .track::after { left: 13px; background: var(--acc); box-shadow: 0 0 6px rgba(53,224,161,.6); }
-
-  #legend { display: flex; gap: 11px; align-items: center; padding-left: 14px; border-left: 1px solid var(--line2); }
+  #legend { display: flex; gap: 12px; align-items: center; }
   #legend .lg { display: flex; gap: 5px; align-items: center; color: var(--tx2); font-size: 10px; letter-spacing: .5px; }
   #legend .lg i { width: 7px; height: 7px; border-radius: 2px; display: inline-block; }
   #g-count { margin-left: auto; color: var(--tx3); font-size: 10px; letter-spacing: 1px; font-variant-numeric: tabular-nums; }
 
-  /* przetargi / surface */
-  #view-tenders, #view-surface { overflow: auto; background: var(--bg1); }
-  .ttable { width: 100%; border-collapse: collapse; }
-  .ttable th { position: sticky; top: 0; background: var(--bg2); color: var(--tx2); font-size: 9px; text-transform: uppercase; letter-spacing: 1.4px; text-align: left; padding: 7px 12px; border-bottom: 1px solid var(--line3); }
-  .ttable td { padding: 7px 12px; border-bottom: 1px solid var(--line); font-size: 12px; color: var(--tx1); }
-  .ttable td a { color: var(--tx0); }
-  .ttable td a:hover { color: var(--cy); }
-  #surface-out { padding: 16px; }
-  .surface-row {
-    padding: 8px 12px; border-bottom: 1px solid var(--line); display: flex; gap: 14px;
-    align-items: baseline; transition: background .1s;
-  }
-  .surface-row:hover { background: var(--bg2); }
-  .surface-row b { color: var(--tx0); font-weight: 500; }
-  .surface-row .dom { font-size: 11.5px; color: var(--bad); }
-  .surface-row .dom::before { content: "◉ "; font-size: 8px; }
-  .callout {
-    display: flex; gap: 10px; color: var(--tx1); background: var(--bg2);
-    border: 1px solid var(--line2); border-left: 2px solid var(--acc);
-    border-radius: 4px; padding: 10px 14px; margin-bottom: 14px; font-size: 11.5px; line-height: 1.6;
-  }
-  .callout.dim { border-left-color: var(--tx3); color: var(--tx2); }
-
-  /* ═══════════════ DRAWER ═══════════════ */
+  /* ══════════ DRAWER ══════════ */
   #drawer {
     width: 420px; background: rgba(12,19,32,.97); border-left: 1px solid var(--line3);
     display: none; flex-direction: column; overflow-y: auto; flex-shrink: 0;
@@ -265,57 +202,8 @@
     color: var(--tx2); margin-bottom: 8px; font-weight: 600; display: flex; align-items: center; gap: 8px;
   }
   #drawer h3::after { content: ""; flex: 1; height: 1px; background: var(--line); }
-  .kv { display: grid; grid-template-columns: 95px 1fr; gap: 2px 10px; font-size: 11.5px; }
-  .kv .k { color: var(--tx2); text-transform: uppercase; font-size: 9.5px; letter-spacing: 1px; padding-top: 2px; }
-  .kv .v2 { color: var(--tx1); }
-  .pill {
-    display: inline-flex; align-items: center; gap: 4px; padding: 1px 7px; border-radius: 3px;
-    font-size: 9.5px; letter-spacing: .8px; text-transform: uppercase; border: 1px solid transparent;
-  }
-  .p-ok  { background: var(--acc2); color: var(--acc); border-color: rgba(53,224,161,.3); }
-  .p-bad { background: var(--bad2); color: var(--bad); border-color: rgba(255,84,112,.3); }
-  .p-dim { background: var(--bg3); color: var(--tx2); border-color: var(--line2); }
-  .em { color: var(--cy); cursor: pointer; border-radius: 3px; padding: 0 2px; font-size: 11.5px; transition: all .1s; }
-  .em:hover { background: var(--cy2); text-decoration: none; }
-  .em::before { content: "› "; color: var(--tx3); }
-  .tl { list-style: none; font-size: 11.5px; }
-  .tl li { padding: 5px 0; border-bottom: 1px dashed rgba(140,170,230,.06); display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
-  .tl .t { color: var(--tx3); font-size: 10px; font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .tl .mail { color: var(--tx2); font-size: 10.5px; }
-
-  /* ═══════════════ CONSOLE ═══════════════ */
-  #console-pane {
-    height: 216px; display: flex; flex-direction: column;
-    border-top: 1px solid var(--line3); background: #04060b; flex-shrink: 0;
-  }
-  #console-bar {
-    display: flex; gap: 10px; padding: 8px 14px; align-items: center;
-    border-bottom: 1px solid var(--line); background: var(--bg1);
-  }
-  .prompt-tag {
-    color: var(--acc); font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase;
-    display: flex; align-items: center; gap: 6px;
-  }
-  .prompt-tag::before { content: "❯"; font-size: 12px; }
-  #dq-in {
-    flex: 1; background: transparent; border: none; border-bottom: 1px solid var(--line2);
-    color: var(--cy); font: 12.5px var(--mono); padding: 6px 2px; outline: none; transition: border-color .15s;
-  }
-  #dq-in:focus { border-bottom-color: var(--acc); }
-  #dq-in::placeholder { color: var(--tx3); }
-  .btn {
-    background: var(--bg3); border: 1px solid var(--line2); color: var(--tx1);
-    padding: 5px 14px; border-radius: 4px; font-size: 11px; letter-spacing: .5px; transition: all .13s;
-  }
-  .btn:hover { border-color: var(--line3); color: var(--tx0); background: var(--bg4); }
-  #dq-run { color: var(--acc); border-color: rgba(53,224,161,.35); background: var(--acc2); }
-  #dq-run:hover { box-shadow: 0 0 10px rgba(53,224,161,.2); border-color: var(--acc); }
-  #console-out { flex: 1; overflow: auto; padding: 8px 16px; font-size: 11.5px; line-height: 1.7; }
-  #console-out .err { color: var(--bad); }
-  #console-out .hint { color: var(--tx2); }
-  #console-out .n { color: var(--acc); font-weight: 700; }
-  #console-out .rrow { color: var(--tx1); }
-  #console-out .rrow::before { content: "│ "; color: var(--tx3); }
+  .em { color: var(--cy); cursor: pointer; border-radius: 3px; padding: 0 2px; font-size: 11.5px; }
+  .em:hover { background: var(--cy2); }
 
   #toast {
     position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(8px);
@@ -331,7 +219,7 @@
     display: flex; flex-direction: column; align-items: center; justify-content: center;
     gap: 10px; padding: 40px 20px; color: var(--tx3); font-size: 11px; letter-spacing: 1px; text-align: center;
   }
-  .empty::before { content: "◌"; font-size: 28px; opacity: .5; }
+  .empty::before { content: "◌"; font-size: 26px; opacity: .5; }
 </style>
 </head>
 <body>
@@ -345,97 +233,39 @@
       <path d="M16 2v6M16 24v6M2 16h6M24 16h6" stroke="#35e0a1" stroke-width="1.2" opacity=".5"/>
     </svg>
     <span class="word">SCR<em>Y</em>ER</span>
-    <span class="ver">v0.10.1</span>
+    <span class="ver">v0.11.0</span>
   </div>
-  <div id="stats"></div>
+  <div id="db-count">—</div>
   <div class="topright">
     <span class="clock"><span style="color:var(--tx3)">UTC</span> <b id="clock">--:--:--</b></span>
     <span class="live"><span id="dot"></span> <span id="live-label">offline</span></span>
-    <button id="refresh">⟳ sync</button>
+    <button id="refresh" title="odśwież dane">⟳</button>
   </div>
 </header>
 
 <nav>
   <button data-tab="szukaj" class="on">Szukaj</button>
-  <button data-tab="graph">Graf <span class="badge" id="b-graph">—</span></button>
-  <button data-tab="tenders">Przetargi <span class="badge" id="b-tenders">0</span></button>
-  <button data-tab="surface">Attack Surface <span class="badge" id="b-surface">0</span></button>
-  <button data-tab="discover">Discovery</button>
+  <button data-tab="graph">Graf <span class="badge" id="b-graph">0</span></button>
 </nav>
 
 <main>
   <div class="view on" id="view-szukaj" style="flex-direction:column">
-    <div style="display:flex;gap:10px;padding:22px 16px 10px;align-items:center;border-bottom:1px solid var(--line)">
-      <span style="color:var(--acc);font-size:11px;letter-spacing:2px">SZUKAJ</span>
-      <input id="s-in" class="inp" style="flex:1;font-size:13px;padding:9px 12px" placeholder="cokolwiek: 'wodociągi bez kontaktu' · 'internet spółka wodna koszalin' · 'recon kghm.com'" autocomplete="off" spellcheck="false">
-      <button id="s-net" class="gbtn" title="wymuś OSINT internetowy (z pominięciem lokalnej bazy)">◉ net: auto</button>
-      <button id="s-run" class="btn" style="color:var(--acc);border-color:rgba(53,224,161,.35);background:var(--acc2)">szukaj ⏎</button>
+    <div id="s-bar">
+      <span id="s-tag">SZUKAJ</span>
+      <input id="s-in" placeholder="cokolwiek — firma, instytucja, domena, miasto… scryer pyta internet" autocomplete="off" spellcheck="false">
+      <button id="s-net" class="gbtn" title="auto: lokal + internet · internet: tylko OSINT">◉ net: auto</button>
+      <button id="s-run" class="btn">szukaj ⏎</button>
     </div>
-    <div id="s-said" style="display:none;padding:8px 16px;font-size:11px;color:var(--tx2);border-bottom:1px solid var(--line)"></div>
-    <div id="s-out" style="flex:1;overflow:auto"></div>
-    <div style="padding:6px 16px;border-top:1px solid var(--line);color:var(--tx3);font-size:9.5px;letter-spacing:.5px">
-      silnik: scryer-intel v1 (autorski, deterministyczny, offline) · <b style="color:var(--cy)">OSINT-FIRST:</b> frazy lecą do internetu, wyniki cache'ują się w ontologii i grafie
-    </div>
-  </div>
-  <div id="list-pane">
-    <div class="pane-label">Rejestr podmiotów <span class="right" id="pane-count"></span></div>
-    <div id="filters">
-      <input id="q" class="inp" placeholder="nazwa / miasto / NIP / e-mail / domena…" autocomplete="off" spellcheck="false">
-      <select id="f-sektor" class="inp"><option value="">sektor: *</option></select>
-      <select id="f-kontakt" class="inp">
-        <option value="">kontakt: *</option>
-        <option value="no">niekontaktowani</option>
-        <option value="yes">skontaktowani</option>
-      </select>
-      <select id="f-sort" class="inp">
-        <option value="score">score ↓</option>
-        <option value="pop">populacja ↓</option>
-        <option value="nazwa">nazwa A→Z</option>
-        <option value="maile">maile ↓</option>
-      </select>
-    </div>
-    <div id="list-meta">—</div>
-    <div id="rows">
-      <table>
-        <thead><tr>
-          <th class="c-sc" data-sort="score">Sc</th>
-          <th data-sort="nazwa">Podmiot</th>
-          <th class="c-pop" data-sort="pop">Pop</th>
-          <th class="c-sektor">Sektor</th>
-          <th class="c-miasto">Miasto</th>
-          <th class="c-mail" data-sort="maile">✉</th>
-        </tr></thead>
-        <tbody id="tbody"></tbody>
-      </table>
-    </div>
+    <div id="s-said"></div>
+    <div id="s-out"></div>
   </div>
 
-  <div id="center">
-    <div class="view" id="view-graph">
-      <div id="graph"><div id="graph-msg">inicjalizacja</div></div>
-      <div class="g-ctl">
-        <span class="tgl">
-          <label class="switch"><input type="checkbox" id="g-domeny"><span class="track"></span>domeny</label>
-          <label class="switch"><input type="checkbox" id="g-osoby"><span class="track"></span>osoby</label>
-          <label class="switch"><input type="checkbox" id="g-only-hot"><span class="track"></span>tylko HOT</label>
-        </span>
-        <span id="legend"></span>
-        <button class="gbtn" id="g-rerender" title="przebuduj graf">⟲ re-render</button>
-        <span id="g-count"></span>
-      </div>
-    </div>
-    <div class="view" id="view-tenders">
-      <table class="ttable"><thead><tr>
-        <th style="width:50px">Sc</th><th>Tytuł</th><th>Organizator</th><th style="width:100px">Deadline</th><th style="width:140px">CPV</th>
-      </tr></thead><tbody id="tenders-tb"></tbody></table>
-    </div>
-    <div class="view" id="view-surface"><div id="surface-out"></div></div>
-    <div class="view" id="view-discover" style="flex-direction:column">
-      <div style="display:flex;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line);align-items:center">
-        <input id="disc-in" class="inp" style="flex:1" placeholder="domena (zwik.szczecin.pl) · e-mail · firma · instytucja…" spellcheck="false">
-        <button id="disc-run" class="btn" style="color:var(--acc);border-color:rgba(53,224,161,.35);background:var(--acc2)">recon ▸</button>
-      </div>
-      <div id="disc-out" style="flex:1;overflow:auto;padding:14px 16px;font-size:11.5px;line-height:1.7"></div>
+  <div class="view" id="view-graph">
+    <div id="graph"></div>
+    <div class="g-ctl">
+      <span id="legend"></span>
+      <button class="gbtn" id="g-fit" title="dopasuj widok">⤢ fit</button>
+      <span id="g-count"></span>
     </div>
   </div>
 
@@ -449,29 +279,18 @@
   </div>
 </main>
 
-<div id="console-pane">
-  <div id="console-bar">
-    <span class="prompt-tag">dquery</span>
-    <input id="dq-in" placeholder='podmioty[sektor=wodociagi,pop>100000] !interakcje[email_sent] limit 30' autocomplete="off" spellcheck="false">
-    <button id="dq-run" class="btn">run ⏎</button>
-    <button id="dq-export" class="btn" title="eksport wyników do pliku">⤓ jsonl</button>
-  </div>
-  <div id="console-out"><span class="hint">obiekt[filtr=wartość] !negacja limit N · obiekty: <b>podmioty</b> / <b>przetargi</b> / <b>interakcje</b> · <kbd>/</kbd> szukaj · <kbd>`</kbd> konsola · <kbd>R</kbd> sync · <kbd>Esc</kbd> zamknij</span></div>
-</div>
-
 <div id="toast"></div>
 
+<script src="/assets/graph-engine.js"></script>
 <script>
 "use strict";
 const $ = (s) => document.querySelector(s);
-const $$ = (s) => [...document.querySelectorAll(s)];
-const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+const esc = (s) => String(s ?? "").replace(/[&<>\"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
 
 const SECTOR_COLORS = {
-  wodociagi: "#55c8ff", szpital: "#ff5470", "admin-publiczna": "#f0b64e",
-  education: "#b18ce8", energy: "#ffa657", transport: "#39d2c0",
-  gov: "#35e0a1", water: "#55c8ff", health: "#ff5470", admin: "#f0b64e",
-  other: "#66789a",
+  websearch: "#39d2c0", wodociagi: "#55c8ff", szpital: "#ff5470", "admin-publiczna": "#f0b64e",
+  education: "#b18ce8", energy: "#ffa657", transport: "#39d2c0", gov: "#35e0a1",
+  discovery: "#66789a", other: "#66789a",
 };
 const colorOf = (s) => SECTOR_COLORS[s] || SECTOR_COLORS.other;
 
@@ -493,128 +312,34 @@ function toast(msg, kind) {
 const fmtN = (n) => n >= 1e6 ? (n/1e6).toFixed(1).replace(".0","") + "M" : n >= 1e3 ? Math.round(n/1e3) + "k" : String(n ?? 0);
 const scoreCls = (v) => v >= 15 ? "s-hot" : v >= 8 ? "s-warm" : v > 0 ? "s-cold" : "s-zero";
 
-/* zegar UTC */
 setInterval(() => {
   const d = new Date();
   $("#clock").textContent = [d.getUTCHours(), d.getUTCMinutes(), d.getUTCSeconds()]
     .map(x => String(x).padStart(2, "0")).join(":");
 }, 1000);
 
-/* ---------------- stats ---------------- */
+/* ---------------- licznik bazy + live ---------------- */
+let STATS = null;
 async function loadStats() {
   try {
     const s = await api("/api/stats");
+    STATS = s;
     $("#dot").classList.add("ok");
     $("#live-label").textContent = "live";
-    $("#stats").innerHTML = [
-      ["podmioty", s.podmioty, ""], ["domeny", s.domeny, ""], ["osoby", s.osoby, ""],
-      ["przetargi", s.przetargi, ""], ["interakcje", s.interakcje, ""],
-      ["kontakt", s.skontaktowani, "acc"], ["hot", s.hot, s.hot ? "hot" : ""],
-      ["bez dmarc", s.bez_dmarc, s.bez_dmarc ? "bad" : ""],
-    ].map(([k, v, cls]) => `<div class="stat ${cls}"><div class="v">${v}</div><div class="k">${k}</div></div>`).join("");
-    $("#b-graph").textContent = s.podmioty;
-    $("#b-tenders").textContent = s.przetargi;
-    const sel = $("#f-sektor");
-    const cur = sel.value;
-    sel.innerHTML = '<option value="">sektor: *</option>' +
-      s.sektors.filter(x => x.sektor).map(x => `<option value="${esc(x.sektor)}">${esc(x.sektor)} ${x.n}</option>`).join("");
-    sel.value = cur;
-  } catch (e) { $("#dot").classList.remove("ok"); $("#live-label").textContent = "offline"; toast("API: " + e.message, "err"); }
-}
-
-/* ---------------- lista podmiotów ---------------- */
-let sortKey = "score";
-async function loadPodmioty() {
-  const p = new URLSearchParams();
-  if ($("#q").value.trim()) p.set("q", $("#q").value.trim());
-  if ($("#f-sektor").value) p.set("sektor", $("#f-sektor").value);
-  if ($("#f-kontakt").value) p.set("kontakt", $("#f-kontakt").value);
-  p.set("sort", sortKey); p.set("limit", "500");
-  $("#list-meta").textContent = "query…";
-  try {
-    const d = await api("/api/podmioty?" + p);
-    $("#list-meta").innerHTML = `pokazano <b>${d.count}</b> / ${d.total}`;
-    $("#pane-count").textContent = `${d.total} rekordów`;
-    $("#tbody").innerHTML = d.items.map(it => `<tr class="row" data-id="${it.id}">
-        <td><span class="score ${scoreCls(it.tier_score)}">${it.tier_score}</span></td>
-        <td class="c-name" title="${esc(it.nazwa)}">${esc(it.nazwa)}</td>
-        <td style="font-variant-numeric:tabular-nums;color:var(--tx2)">${it.pop ? fmtN(it.pop) : "—"}</td>
-        <td><span class="sektor-dot" style="background:${colorOf(it.sektor)}"></span>${esc(it.sektor || "—")}</td>
-        <td title="${esc(it.miasto)}">${esc(it.miasto || "—")}</td>
-        <td>${it.maile ? `<span class="mailed">${it.maile}✉</span>` : '<span class="nomail">·</span>'}</td>
-      </tr>`).join("");
-  } catch (e) { $("#list-meta").textContent = "błąd: " + e.message; }
-}
-
-/* ---------------- drawer ---------------- */
-async function showPodmiot(id) {
-  try {
-    $$("#tbody tr").forEach(tr => tr.classList.toggle("open", tr.dataset.id == id));
-    const d = await api("/api/podmiot/" + id);
-    const p = d.podmiot;
-    $("#d-name").textContent = p.nazwa;
-    $("#d-sub").innerHTML =
-      `<span class="score ${scoreCls(p.tier_score)}">${p.tier_score}</span>` +
-      `<span class="pill p-dim"><span class="sektor-dot" style="background:${colorOf(p.sektor)}"></span>${esc(p.sektor||"—")}</span>` +
-      `<span class="pill p-dim">KSC ${esc(p.ksc_status)}</span>`;
-    const ts = (u) => u ? new Date(u*1000).toLocaleString("pl-PL", {dateStyle:"short", timeStyle:"short"}) : "—";
-    $("#d-body").innerHTML = `
-      <section><h3>profil</h3><div class="kv">
-        <span class="k">nip</span><span class="v2">${esc(p.nip)||"—"}</span>
-        <span class="k">miasto</span><span class="v2">${esc(p.miasto)||"—"}</span>
-        <span class="k">województwo</span><span class="v2">${esc(p.wojewodztwo)||"—"}</span>
-        <span class="k">populacja</span><span class="v2">${p.pop?fmtN(p.pop):"—"}</span>
-        <span class="k">źródła</span><span class="v2">${esc(p.zrodla)||"—"}</span>
-      </div></section>
-      <section><h3>domeny / poczta</h3>${
-        d.domeny.length ? d.domeny.map(x => `<div style="margin-bottom:7px">
-          <div style="color:var(--tx0);margin-bottom:2px">${esc(x.nazwa)}</div>
-          ${x.mx?'<span class="pill p-ok">mx</span>':'<span class="pill p-dim">no-mx</span>'}
-          ${x.dmarc?'<span class="pill p-ok">dmarc</span>':'<span class="pill p-bad">bez dmarc</span>'}
-          ${x.spf?'':'<span class="pill p-bad">bez spf</span>'}
-        </div>`).join("") : '<span class="hint">brak domen</span>'
-      }</section>
-      <section><h3>osoby · ${d.osoby.length}</h3>${
-        d.osoby.map(o => `<div style="margin-bottom:3px"><span class="em" data-copy="${esc(o.email)}" title="klik = kopiuj">${esc(o.email)}</span>
-          ${o.rola?`<span class="pill p-dim">${esc(o.rola)}</span>`:""}</div>`).join("") || "—"
-      }</section>
-      <section><h3>akcje</h3>
-        <button class="btn" id="d-recon" style="width:100%" data-dom="${esc(d.domeny[0]?.nazwa || "")}">◉ recon (DNS + RDAP + crt.sh + WWW) → ontologia</button>
-      </section>
-      <section><h3>interakcje · ${d.interakcje.length}</h3><ul class="tl">${
-        d.interakcje.map(i => `<li><span class="t">${ts(i.ts)}</span>
-          <span class="pill ${i.typ==="email_sent"?"p-ok":"p-dim"}">${esc(i.typ)}</span>
-          <span class="mail">${esc(i.email)}</span>
-          <span style="color:var(--tx1)">${esc(i.temat)}</span></li>`).join("") || "<li>—</li>"
-      }</ul></section>`;
-    $("#drawer").classList.add("on");
-    setTimeout(() => window.dispatchEvent(new Event("resize")), 100); // canvas grafu za drawerem
-  } catch (e) { toast(e.message, "err"); }
-}
-$("#drawer-close").onclick = () => { $("#drawer").classList.remove("on"); $$("#tbody tr").forEach(tr => tr.classList.remove("open")); setTimeout(() => window.dispatchEvent(new Event("resize")), 100); };
-document.addEventListener("click", (ev) => {
-  const b = ev.target.closest("#d-recon");
-  if (b) {
-    const dom = b.dataset.dom;
-    if (!dom) return toast("podmiot nie ma domeny w grafie — użyj zakładki Discovery", "err");
-    document.querySelector('nav button[data-tab="discover"]').click();
-    $("#disc-in").value = dom;
-    $("#disc-run").click();
+    const n = s.podmioty, d = s.domeny;
+    $("#db-count").innerHTML = n === 0
+      ? `<b>świeża sesja</b> — baza pusta · szukaj, a scryer zbuduje graf z internetu`
+      : `encje <b>${n}</b> · domeny <b>${d}</b> · bez DMARC <b style="color:${s.bez_dmarc ? "var(--bad)" : "var(--tx1)"}">${s.bez_dmarc}</b>`;
+    $("#b-graph").textContent = n;
+  } catch (e) {
+    $("#dot").classList.remove("ok");
+    $("#live-label").textContent = "offline";
   }
-});
-document.addEventListener("click", (ev) => {
-  const em = ev.target.closest("[data-copy]");
-  if (em) { navigator.clipboard?.writeText(em.dataset.copy); toast("skopiowano " + em.dataset.copy, "ok"); }
-});
+}
 
-/* ---------------- graf — WŁASNY SILNIK WEBGL (zero deps) ---------------- */
-</script>
-<script src="/assets/graph-engine.js"></script>
-<script>
-"use strict";
-let graphBuilt = false, GRAPH = null, ENGINE = null;
+/* ---------------- graf ---------------- */
+let GRAPH = null, ENGINE = null, graphBuilt = false;
 
-/* diagnostyka grafu — widać na ekranie KAŻDY krok startu */
 function gdiag(msg, bad) {
   let d = document.getElementById("g-diag");
   if (!d) {
@@ -627,16 +352,9 @@ function gdiag(msg, bad) {
 }
 
 async function buildGraph() {
-  gdiag("start");
   try {
-    if (!GRAPH) {
-      gdiag("fetch /api/graph");
-      GRAPH = await api("/api/graph");
-      gdiag(`dane OK: ${GRAPH.podmioty?.length ?? "?"} podmiotów`);
-    }
-    if (typeof GraphEngine === "undefined") throw new Error("graph-engine.js nie załadowany");
-    gdiag("silnik: własny WebGL, zero deps");
-    graphBuilt = true;
+    gdiag("fetch /api/graph");
+    GRAPH = await api("/api/graph");
     renderGraph();
   } catch (e) {
     gdiag("BŁĄD: " + e.message, true);
@@ -644,300 +362,280 @@ async function buildGraph() {
 }
 
 function renderGraph() {
-  const showD = $("#g-domeny").checked, showO = $("#g-osoby").checked, onlyHot = $("#g-only-hot").checked;
-  const emailed = new Set(GRAPH.emailed || []);
   const n = [], e = [];
-  if (!$("#legend").childElementCount) {
-    $("#legend").innerHTML = Object.entries(SECTOR_COLORS)
-      .filter(([k]) => !["other","water","health","admin"].includes(k))
-      .map(([k, c]) => `<span class="lg"><i style="background:${c}"></i>${k}</span>`).join("");
-  }
-  // HOT-podmioty są większe i z halo — tryb „radar” jak w konsolach intel
   for (const p of GRAPH.podmioty) {
-    if (onlyHot && p.score < 15) continue;
     const hot = p.score >= 15;
     n.push({
       id: "p" + p.id,
-      label: p.nazwa.length > 36 ? p.nazwa.slice(0, 35) + "…" : p.nazwa,
-      title: `${p.nazwa}\nscore: ${p.score}\nmiasto: ${p.miasto || "—"}\n(klik = profil)`,
+      label: p.nazwa.length > 34 ? p.nazwa.slice(0, 33) + "…" : p.nazwa,
+      title: `${p.nazwa}\nsektor: ${p.sektor || "—"}\nmiasto: ${p.miasto || "—"}\nscore: ${p.score}\n(klik = profil)`,
       kind: "podmiot",
       color: colorOf(p.sektor),
-      size: hot ? 15 : 11,
+      size: hot ? 16 : 12,
       hot,
     });
   }
-  if (showD) for (const d of GRAPH.domeny) {
+  for (const d of GRAPH.domeny) {
     n.push({
       id: "d" + d.id, label: d.nazwa, kind: "domena",
-      size: 7, color: d.mx ? "#55c8ff" : "#2c3c58",
+      size: 6, color: d.mx ? "#55c8ff" : "#2c3c58",
       title: `${d.nazwa}\nMX: ${d.mx ? "tak" : "nie"}\nDMARC: ${d.dmarc || "BRAK"}`,
     });
-    e.push({ s: "p" + d.podmiot_id, t: "d" + d.id, color: "#5a78b4", alpha: 0.16, len: 120 });
+    e.push({ s: "p" + d.podmiot_id, t: "d" + d.id, color: "#5a78b4", alpha: 0.10, len: 150 });
   }
-  if (showO) for (const o of GRAPH.osoby) {
-    const got = emailed.has(o.email);
-    n.push({
-      id: "o" + o.id, label: got ? "✉ " + o.email : o.email, kind: "osoba",
-      size: 5.5, color: got ? "#35e0a1" : "#28374f", title: o.email,
-    });
-    e.push({ s: "p" + o.podmiot_id, t: "o" + o.id, color: "#5a78b4", alpha: 0.11, len: 95 });
+  // osoby tylko gdy ich mało (nie siatka na graf)
+  const emailed = new Set(GRAPH.emailed || []);
+  if ((GRAPH.osoby || []).length <= 120) {
+    for (const o of GRAPH.osoby) {
+      const got = emailed.has(o.email);
+      n.push({
+        id: "o" + o.id, label: got ? "✉ " + o.email : o.email, kind: "osoba",
+        size: 4.5, color: got ? "#35e0a1" : "#28374f", title: o.email,
+      });
+      e.push({ s: "p" + o.podmiot_id, t: "o" + o.id, color: "#5a78b4", alpha: 0.07, len: 120 });
+    }
   }
-  const container = $("#graph");
+
   gdiag(`węzły: ${n.length}, krawędzie: ${e.length}`);
+  $("#g-count").textContent = `${n.length} węzłów · ${e.length} krawędzi`;
+  $("#b-graph").textContent = (GRAPH.podmioty || []).length;
+
+  const container = $("#graph");
   if (!n.length) {
-    // BUGFIX: NIE wolno robić innerHTML na kontenerze — kasuje canvasy
-    // silnika (rysował potem w próżnię = graf pusty na zawsze).
-    // Pusty stan to NORMALNY stan świeżej bazy — overlay zamiast destrukcji.
     let ov = document.getElementById("g-empty");
     if (!ov) {
       ov = document.createElement("div");
-      ov.id = "g-empty"; ov.className = "empty";
-      ov.style.cssText = "position:absolute;inset:0;z-index:3;pointer-events:none";
+      ov.id = "g-empty";
       container.appendChild(ov);
     }
-    ov.textContent = "0 węzłów — pusta baza to stan normalny: SZUKAJ (internet) zbuduje graf";
+    ov.innerHTML = `<b>graf czeka na pierwszy trop</b><span>wróć do SZUKAJ i poszukaj czegokolwiek —<br>scryer zapyta internet i wklei tu to co znajdzie</span>`;
     $("#g-count").textContent = "0 węzłów";
     return;
   }
-  // węzły są → zdejmij overlay pustego stanu jeśli był
   document.getElementById("g-empty")?.remove();
-  // jeśli canvasy silnika wyleciały z DOM (stara lipsa) — odmów przyjęcia
-  if (ENGINE && !ENGINE.alive) { ENGINE.destroy(); ENGINE = null; gdiag("silnik odtworzony (canvasy utracone)"); }
-  // kontener spłaszczony → silnik sam poczeka na ResizeObserver; ale nie buduj
-  // ślepo przy 0px — jeden retry dla wyrobienia się layoutu zakładki
-  if (container.clientWidth < 50 || container.clientHeight < 50) {
-    gdiag("kontener spłaszczony — retry za 200ms", true);
-    setTimeout(() => renderGraph(), 200);
-    return;
+  if (ENGINE && !ENGINE.alive) {
+    ENGINE.destroy(); ENGINE = null;
+    gdiag("silnik odtworzony (canvasy utracone)");
   }
   if (!ENGINE) {
     ENGINE = GraphEngine(container, {
       onDiag: (m, bad) => gdiag(m, bad),
       onCounts: (nv, ev) => { $("#g-count").textContent = `${nv} węzłów · ${ev} krawędzi`; },
-      onProgress: (p) => {
-        const msg = $("#graph-msg");
-        if (p === null) { msg?.remove(); container.querySelector(".scanline")?.remove(); }
-        else if (msg) msg.textContent = `stabilizacja ${Math.round(p * 100)}%`;
-      },
       onSelect: (node) => {
         if (node && node.kind === "podmiot") showPodmiot(Number(String(node.id).slice(1)));
       },
     });
-    gdiag("GraphEngine utworzony");
-  } else {
-    // rebuild po zmianie filtrów — wyczyść kontener z empty-state jeśli był
-    container.querySelector(".empty")?.remove();
-    const msg = document.createElement("div");
-    msg.id = "graph-msg"; msg.textContent = "stabilizacja";
-    container.insertBefore(msg, container.firstChild);
-    if (!container.querySelector(".scanline")) {
-      const sl = document.createElement("div"); sl.className = "scanline";
-      container.appendChild(sl);
+    if (!$("#legend").childElementCount) {
+      $("#legend").innerHTML = Object.entries(SECTOR_COLORS)
+        .filter(([k]) => !["discovery","other"].includes(k))
+        .map(([k, c]) => `<span class="lg"><i style="background:${c}"></i>${k}</span>`).join("");
     }
   }
   ENGINE.setData({ nodes: n, edges: e });
-  $("#g-count").textContent = `${n.length} węzłów · ${e.length} krawędzi`;
-}
-$("#g-rerender").onclick = () => { GRAPH = null; buildGraph(); };
-
-/* ---------------- discovery ---------------- */
-async function runDiscover(q) {
-  const out = $("#disc-out");
-  out.innerHTML = '<span style="color:var(--tx2)">recon w toku — DNS → RDAP → crt.sh → WWW → search (może potrwać ~10-30s)…</span>';
-  try {
-    const d = await api("/api/discover", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ q }),
-    });
-    renderDiscovery(d);
-    loadStats(); // dane mogły wejść do grafu
-  } catch (e) {
-    out.innerHTML = `<span style="color:var(--bad)">✗ ${esc(e.message)}</span>`;
-  }
-}
-function renderDiscovery(d) {
-  const out = $("#disc-out");
-  const L = [];
-  const sec = (t) => L.push(`<div style="margin:14px 0 6px;color:var(--acc);font-size:9.5px;letter-spacing:2px;text-transform:uppercase;display:flex;gap:8px;align-items:center">${t}<span style="flex:1;height:1px;background:var(--line)"></span></div>`);
-  const kv = (k, v, cls) => v ? L.push(`<div><span style="color:var(--tx2);text-transform:uppercase;font-size:9.5px;letter-spacing:1px">${k}</span> <span class="${cls||""}" style="color:var(--tx0)">${v}</span></div>`) : null;
-  const list = (arr, cls) => (arr || []).map(x => `<div style="color:${cls||"var(--tx1)"};padding-left:12px">· ${esc(String(x))}</div>`).join("");
-
-  L.push(`<div style="color:var(--tx0);font-size:13px;margin-bottom:2px">${esc(d.query)}</div>`);
-  kv("typ", d.kind);
-  if (d.domain_guessed) kv("domena z search", d.domain_guessed, "");
-  if (d.domain) kv("domena", d.domain);
-
-  if (d.dns) {
-    sec("dns");
-    kv("A", (d.dns.a || []).join(", "));
-    kv("AAAA", (d.dns.aaaa || []).join(", "));
-    if (d.dns.mx?.length) { kv("MX", ""); L.push(list(d.dns.mx, "var(--cy)")); }
-    if (d.dns.ns?.length) { kv("NS", ""); L.push(list(d.dns.ns)); }
-    kv("SPF", (d.dns.spf || [])[0]);
-    kv("DMARC", (d.dns.dmarc || [])[0], d.dns.dmarc?.length ? "" : "");
-    if (!d.dns.has_mail) L.push('<div style="color:var(--warn)">⚠ brak MX — domena nie odbiera poczty</div>');
-    if (!d.dns.dmarc?.length) L.push('<div style="color:var(--bad)">◉ brak DMARC — spoofing możliwy (amunicja)</div>');
-  }
-  if (d.rdap && d.rdap !== null) {
-    sec("rdap / rejestracja");
-    kv("registrar", esc(d.rdap.registrar || "—"));
-    if (d.rdap.dates?.length) L.push(list(d.rdap.dates));
-    if (d.rdap.status?.length) kv("status", esc(d.rdap.status.join(", ")));
-  }
-  if (d.subdomains?.length) {
-    sec("subdomeny (crt.sh) · " + d.subdomains.length);
-    L.push(list(d.subdomains.slice(0, 40), "var(--cy)"));
-  }
-  const w = d.www;
-  if (w?.ok) {
-    sec("www · " + (w.url || ""));
-    kv("title", esc(w.title || "—"));
-    kv("opis", esc(w.description || "—"));
-    kv("cms/generator", esc(w.generator || "—"), w.generator ? "" : "");
-    if (w.emails?.length) { kv("emaile", ""); L.push(list(w.emails, "var(--cy)")); }
-    if (w.phones?.length) { kv("telefony", ""); L.push(list(w.phones)); }
-    if (w.persons?.length) { kv("osoby (wzorzec imie.nazwisko)", ""); L.push(list(w.persons, "var(--acc)")); }
-  } else if (w) {
-    sec("www");
-    L.push(`<div style="color:var(--tx2)">${esc(w.note || "brak odpowiedzi")}</div>`);
-  }
-  if (d.web_results?.results?.length) {
-    sec(`web · ${d.web_results.engine} · ${d.web_results.results.length}`);
-    for (const r of d.web_results.results.slice(0, 10)) {
-      L.push(`<div style="padding:3px 0"><a href="${esc(r.url)}" target="_blank" rel="noopener" style="color:var(--tx0)">${esc(r.title || r.url)}</a><div style="color:var(--tx3);font-size:10px;padding-left:12px">${esc(r.url)}</div></div>`);
-    }
-  } else if (d.web_results?.error) {
-    sec("web");
-    L.push(`<div style="color:var(--tx2)">search niedostępny: ${esc(d.web_results.error)}</div>`);
-  }
-  out.innerHTML = L.join("");
-}
-$("#disc-run").onclick = () => { const q = $("#disc-in").value.trim(); if (q) runDiscover(q); };
-$("#disc-in").addEventListener("keydown", (ev) => { if (ev.key === "Enter") $("#disc-run").click(); });
-["#g-domeny", "#g-osoby", "#g-only-hot"].forEach(sel => $(sel).onchange = () => graphBuilt && renderGraph());
-
-/* ---------------- przetargi / attack surface ---------------- */
-async function loadTenders() {
-  try {
-    const d = await api("/api/tenders");
-    $("#b-tenders").textContent = d.count;
-    $("#tenders-tb").innerHTML = d.items.map(t => `<tr>
-      <td><span class="score ${scoreCls(t.match_score)}">${t.match_score}</span></td>
-      <td title="${esc(t.tytul)}"><a href="${esc(t.url)}" target="_blank" rel="noopener">${esc(t.tytul)}</a></td>
-      <td>${esc(t.org)}</td><td style="font-variant-numeric:tabular-nums">${esc(t.deadline)}</td><td style="color:var(--tx2)">${esc(t.cpv)}</td></tr>`).join("")
-      || '<tr><td colspan="5"><div class="empty">brak przetargów w grafie — import: scryer-core tenders &lt;bzp.json&gt;</div></td></tr>';
-  } catch (e) { toast(e.message, "err"); }
-}
-async function loadSurface() {
-  try {
-    const d = await api("/api/attack-surface");
-    $("#b-surface").textContent = d.count;
-    $("#surface-out").innerHTML = d.items.length
-      ? `<div class="callout">HOT-podmioty (score ≥ 15) z domeną bez DMARC — amunicja na pierwszy mail: <i>„pocztą państwa można podszywać się bez przeszkód”</i>. Klik w podmiot na liście otworzy pełny profil.</div>` +
-        d.items.map(x => `<div class="surface-row"><b>${esc(x.nazwa)}</b><span class="dom">${esc(x.domena)}</span></div>`).join("")
-      : '<div class="callout dim">brak sygnałów — HOT-y z dziurawym DMARC-em się skończyły. Uruchom scoring, żeby podbić tier_score bazy.</div>';
-  } catch (e) { toast(e.message, "err"); }
+  graphBuilt = true;
 }
 
-/* ---------------- dQuery ---------------- */
-async function runQuery(q) {
-  const out = $("#console-out");
-  out.innerHTML = `<span class="hint">query…</span>`;
-  try {
-    const d = await api("/api/query", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ q }),
-    });
-    out.innerHTML = `<div><span class="n">${d.count}</span> <span class="hint">wyników</span></div>` +
-      d.rows.map(r => `<div class="rrow">${esc(r)}</div>`).join("");
-  } catch (e) { out.innerHTML = `<div class="err">✗ ${esc(e.message)}</div>`; }
-}
+$("#g-fit").onclick = () => ENGINE?.fitView(true);
+$("#refresh").onclick = async () => {
+  await loadStats();
+  if (currentTab === "graph") buildGraph();
+};
 
-/* ---------------- SZUKAJ (OSINT-first + hybryda) ---------------- */
-let netMode = "auto"; // auto | internet | local
+/* ---------------- SZUKAJ ---------------- */
+let netMode = "auto";
+let lastResults = null;
+
 async function runSzukaj(q) {
   const out = $("#s-out"), said = $("#s-said");
-  out.innerHTML = '<div class="empty">szukam…</div>';
+  out.innerHTML = netMode === "internet"
+    ? '<div class="empty">pytam internet… (search → domeny → DNS → audyt WWW)</div>'
+    : '<div class="empty">szukam…</div>';
   said.style.display = "none";
   try {
     const d = await api("/api/ai", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ q, mode: netMode === "auto" ? null : netMode }),
     });
+    lastResults = d;
     said.style.display = "block";
-    said.textContent = "";
     if (d.mode === "external") {
-      said.innerHTML = `<span style="color:var(--cy)">◉ RECON</span> ${esc(d.said)} — zbieram DNS/RDAP/crt.sh/WWW/search…`;
-      renderDiscovery(d.report);
-      loadStats();
-    } else if (d.mode === "hybrid") {
+      said.innerHTML = `<span style="color:var(--cy)">◉ RECON</span> ${esc(d.said)} — zbieram DNS/RDAP/crt.sh/WWW…`;
+      await deepRecon(d.q, true);
+      return;
+    }
+    if (d.mode === "hybrid") {
       said.innerHTML = `<span style="color:var(--acc)">▸ ${esc(d.said)}</span>`;
-      renderSzukajInternet(d.internet, true);
-      loadStats();
+      renderInternet(d.internet);
+      renderLocal(d.local);
     } else if (d.mode === "internet") {
       said.innerHTML = `<span style="color:var(--cy)">◉ ${esc(d.said)}</span>`;
-      renderSzukajInternet(d, false);
-      loadStats();
+      renderInternet(d);
     } else {
       said.innerHTML = `<span style="color:var(--acc)">▸ ROZUMIEM</span> ${esc(d.said)} <span style="color:var(--tx3)">· ${d.count} wyników</span>`;
-      renderSzukajLocal(d);
+      renderLocal(d);
     }
+    loadStats();
   } catch (e) {
     out.innerHTML = `<div class="empty" style="color:var(--bad)">✗ ${esc(e.message)}</div>`;
   }
 }
-function renderSzukajInternet(d, afterLocal) {
+
+function renderInternet(d) {
   const out = $("#s-out");
-  const head = afterLocal ? '<div style="padding:10px 16px 4px;color:var(--cy);font-size:9.5px;letter-spacing:2px;text-transform:uppercase">◉ internet (OSINT, cache → ontologia)</div>' : "";
+  const head = `<div class="sec-label">◉ internet · ${d.count || 0} domen · cache → ontologia</div>`;
   if (!d.items?.length) {
-    out.innerHTML = head + '<div class="empty">internet nic sensownego nie zwrócił — przeformułuj frazę</div>';
+    out.insertAdjacentHTML("beforeend", head + '<div class="empty">internet nic sensownego nie zwrócił</div>');
     return;
   }
-  out.innerHTML = head + d.items.map(h => {
+  out.insertAdjacentHTML("beforeend", head + d.items.map(h => {
     const mx = h.mx ? `<span class="pill p-ok">mx: ${esc(h.mx_provider || "tak")}</span>` : '<span class="pill p-bad">brak MX</span>';
     const dm = h.dmarc ? '<span class="pill p-ok">dmarc</span>' : '<span class="pill p-bad">bez DMARC</span>';
     const tls = h.https === false ? '<span class="pill p-bad">brak HTTPS</span>' : (h.hsts ? '<span class="pill p-ok">hsts</span>' : '');
-    const csp = h.csp ? '' : '<span class="pill p-dim">bez CSP</span>';
-    return `<div class="surface-row" style="flex-wrap:wrap;cursor:default">
-      <b>${esc(h.title || h.domain)}</b>
-      <span class="dom">${esc(h.domain)}</span>
+    const csp = h.csp ? "" : '<span class="pill p-dim">bez CSP</span>';
+    return `<div class="hit">
+      <span class="t">${esc(h.title || h.domain)}</span>
+      <span class="d">${esc(h.domain)}</span>
       ${mx}${dm}${tls}${csp}
-      <span style="margin-left:auto;display:flex;gap:6px">
+      <span class="acts">
         <button class="gbtn" data-deep="${esc(h.domain)}">pogłęb ▸</button>
         <button class="gbtn" data-goto="${esc(h.domain)}">GRAF ◈</button>
       </span>
+      <span class="u">${esc(h.url)}</span>
     </div>`;
-  }).join("");
+  }).join(""));
 }
-function renderSzukajLocal(d) {
+
+function renderLocal(d) {
   const out = $("#s-out");
-  if (!d.items?.length) {
-    out.innerHTML = '<div class="empty">brak wyników w bazie — fraza lecła też do internetu (hybryda) albo użyj „net: internet”</div>';
+  if (!d.items?.length || d.kind !== "podmioty") {
+    if (d.kind === "interakcje") {
+      out.insertAdjacentHTML("beforeend", `<div class="sec-label">▸ lokal · interakcje</div>` +
+        d.items.map(i => `<div class="lrow"><span class="score s-ok">${esc(i.typ)}</span><span style="color:var(--cy)">${esc(i.email)}</span><span style="color:var(--tx1)">${esc(i.temat)}</span></div>`).join(""));
+    }
     return;
   }
-  if (d.kind === "podmioty") {
-    out.innerHTML = `<table class="ttable"><thead><tr><th style="width:46px">Sc</th><th>Podmiot</th><th style="width:110px">Sektor</th><th style="width:110px">Miasto</th><th style="width:80px">Pop</th><th style="width:60px">✉</th></tr></thead><tbody>` +
-      d.items.map(p => `<tr class="row" data-id="${p.id}" style="cursor:pointer">
-        <td><span class="score ${scoreCls(p.score)}">${p.score}</span></td>
-        <td style="color:var(--tx0)">${esc(p.nazwa)}</td>
-        <td><span class="sektor-dot" style="background:${colorOf(p.sektor)}"></span>${esc(p.sektor || "—")}</td>
-        <td>${esc(p.miasto || "—")}</td>
-        <td style="font-variant-numeric:tabular-nums;color:var(--tx2)">${p.pop ? fmtN(p.pop) : "—"}</td>
-        <td>${p.kontakt ? '<span class="mailed">✓</span>' : '<span class="nomail">·</span>'}</td>
-      </tr>`).join("") + "</tbody></table>";
-  } else if (d.kind === "interakcje") {
-    out.innerHTML = d.items.map(i => `<div style="padding:6px 0;border-bottom:1px solid var(--line);font-size:12px">
-      <span style="color:var(--tx3)">${new Date(i.ts * 1000).toLocaleString("pl-PL", { dateStyle: "short", timeStyle: "short" })}</span>
-      <span class="pill p-ok">${esc(i.typ)}</span> <span style="color:var(--cy)">${esc(i.email)}</span>
-      <span style="color:var(--tx1)">${esc(i.temat)}</span> <span style="color:var(--tx3)">· ${esc(i.podmiot || "")}</span></div>`).join("");
-  } else if (d.kind === "przetargi") {
-    out.innerHTML = d.items.map(t => `<div style="padding:7px 0;border-bottom:1px solid var(--line)">
-      <span class="score ${scoreCls(t.score)}">${t.score}</span>
-      <a href="${esc(t.url)}" target="_blank" rel="noopener" style="color:var(--tx0)">${esc(t.tytul)}</a>
-      <div style="color:var(--tx3);font-size:10.5px;padding-left:44px">${esc(t.org)} · deadline ${esc(t.deadline)}</div></div>`).join("");
+  out.insertAdjacentHTML("beforeend", `<div class="sec-label">▸ lokalna baza · ${d.count}</div>` +
+    d.items.map(p => `<div class="lrow row" data-id="${p.id}" style="cursor:pointer">
+      <span class="score ${scoreCls(p.score)}">${p.score}</span>
+      <span style="color:var(--tx0)">${esc(p.nazwa)}</span>
+      <span><span class="sektor-dot" style="background:${colorOf(p.sektor)}"></span><span style="color:var(--tx2)">${esc(p.sektor || "—")}</span></span>
+      <span style="margin-left:auto;color:var(--tx3)">${esc(p.miasto || "")}</span>
+    </div>`).join(""));
+}
+
+/* pogłęb = pełny recon (DNS+RDAP+crt.sh+WWW+search) inline w wynikach */
+async function deepRecon(q, replaceOut) {
+  const out = $("#s-out"), said = $("#s-said");
+  if (replaceOut) out.innerHTML = '<div class="empty">recon w toku…</div>';
+  else out.insertAdjacentHTML("beforeend", '<div class="sec-label" id="deep-spin">◉ recon ' + esc(q) + ' w toku…</div>');
+  try {
+    const d = await api("/api/discover", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ q }),
+    });
+    document.getElementById("deep-spin")?.remove();
+    renderRecon(d);
+    loadStats();
+  } catch (e) {
+    said.innerHTML = `<span style="color:var(--bad)">✗ ${esc(e.message)}</span>`;
   }
 }
-$("#s-run").onclick = () => { const q = $("#s-in").value.trim(); if (q) runSzukaj(q); };
+
+function renderRecon(d) {
+  const out = $("#s-out");
+  const L = [`<div class="sec-label">◉ recon: ${esc(d.query)} ${d.domain_guessed ? `→ <span style="color:var(--cy)">${esc(d.domain_guessed)}</span>` : ""}</div>`];
+  const kv = (k, v, cls) => v ? L.push(`<div class="lrow"><span class="k" style="color:var(--tx2);min-width:90px;text-transform:uppercase;font-size:9.5px;letter-spacing:1px">${k}</span><span style="color:${cls || "var(--tx1)"};overflow-wrap:anywhere">${v}</span></div>`) : null;
+  const list = (arr, cls) => (arr || []).map(x => `<div class="lrow" style="padding-left:26px;color:${cls || "var(--tx1)"}">· ${esc(String(x))}</div>`).join("");
+  if (d.dns) {
+    L.push('<div class="sec-label">dns</div>');
+    kv("A", (d.dns.a || []).join(", "));
+    kv("MX", (d.dns.mx || []).join(" · "));
+    kv("SPF", (d.dns.spf || [])[0]);
+    kv("DMARC", (d.dns.dmarc || [])[0], d.dns.dmarc?.length ? "var(--acc)" : "var(--bad)");
+    if (!d.dns.has_mail) L.push('<div class="lrow" style="color:var(--bad)">◉ brak MX — domena nie odbiera poczty</div>');
+  }
+  if (d.rdap?.registrar) {
+    L.push('<div class="sec-label">rdap</div>');
+    kv("registrar", esc(d.rdap.registrar));
+    (d.rdap.dates || []).slice(0, 4).forEach(x => kv("", esc(x)));
+  }
+  if (d.subdomains?.length) {
+    L.push(`<div class="sec-label">subdomeny (crt.sh) · ${d.subdomains.length}</div>`);
+    L.push(list(d.subdomains.slice(0, 30), "var(--cy)"));
+  }
+  const w = d.www;
+  if (w?.ok) {
+    L.push('<div class="sec-label">www</div>');
+    kv("title", esc(w.title || "—"));
+    kv("generator", esc(w.generator || "—"));
+    if (w.emails?.length) L.push(list(w.emails.slice(0, 12), "var(--cy)"));
+    if (w.phones?.length) L.push(list(w.phones.slice(0, 6)));
+    if (w.persons?.length) L.push(list(w.persons.slice(0, 12), "var(--acc)"));
+  }
+  if (d.web_results?.results?.length) {
+    L.push(`<div class="sec-label">web · ${d.web_results.results.length}</div>`);
+    for (const r of d.web_results.results.slice(0, 8)) {
+      L.push(`<div class="lrow" style="flex-direction:column;gap:2px;align-items:flex-start"><a href="${esc(r.url)}" target="_blank" rel="noopener" style="color:var(--tx0)">${esc(r.title || r.url)}</a><span style="color:var(--tx3);font-size:10px">${esc(r.url)}</span></div>`);
+    }
+  }
+  out.insertAdjacentHTML("beforeend", L.join(""));
+}
+
+/* ---------------- drawer (profil podmiotu) ---------------- */
+async function showPodmiot(id) {
+  try {
+    const d = await api("/api/podmiot/" + id);
+    const p = d.podmiot;
+    $("#d-name").textContent = p.nazwa;
+    $("#d-sub").innerHTML =
+      `<span class="score ${scoreCls(p.tier_score)}">${p.tier_score}</span>` +
+      `<span class="pill p-dim"><span class="sektor-dot" style="background:${colorOf(p.sektor)}"></span>${esc(p.sektor || "—")}</span>` +
+      (p.miasto ? `<span class="pill p-dim">${esc(p.miasto)}</span>` : "");
+    $("#d-body").innerHTML = `
+      <section><h3>domeny / poczta</h3>${(d.domeny || []).map(x => `<div style="margin-bottom:7px">
+          <div style="color:var(--tx0);margin-bottom:2px">${esc(x.nazwa)}</div>
+          ${x.mx ? '<span class="pill p-ok">mx</span>' : '<span class="pill p-dim">no-mx</span>'}
+          ${x.dmarc ? '<span class="pill p-ok">dmarc</span>' : '<span class="pill p-bad">bez DMARC</span>'}
+        </div>`).join("") || '<span style="color:var(--tx3)">brak</span>'}
+      </section>
+      ${(d.osoby || []).length ? `<section><h3>osoby · ${d.osoby.length}</h3>${d.osoby.map(o => `<div style="margin-bottom:3px"><span class="em" data-copy="${esc(o.email)}" title="klik = kopiuj">${esc(o.email)}</span> ${o.rola ? `<span class="pill p-dim">${esc(o.rola)}</span>` : ""}</div>`).join("")}</section>` : ""}
+      <section><h3>akcje</h3>
+        <button class="btn" id="d-recon" style="width:100%" data-dom="${esc(d.domeny[0]?.nazwa || "")}">◉ pogłęb recon → ontologia</button>
+      </section>`;
+    $("#drawer").classList.add("on");
+  } catch (e) { toast(e.message, "err"); }
+}
+$("#drawer-close").onclick = () => $("#drawer").classList.remove("on");
+document.addEventListener("click", (ev) => {
+  const c = ev.target.closest("[data-copy]");
+  if (c) { navigator.clipboard?.writeText(c.dataset.copy); toast("skopiowano " + c.dataset.copy, "ok"); }
+  const r = ev.target.closest("#d-recon");
+  if (r) {
+    if (!r.dataset.dom) return toast("brak domeny — użyj SZUKAJ", "err");
+    switchTab("szukaj");
+    deepRecon(r.dataset.dom, true);
+  }
+});
+
+/* ---------------- skok do grafu ---------------- */
+async function gotoGraph(dom) {
+  try { GRAPH = await api("/api/graph"); } catch { return; }
+  switchTab("graph");
+  const hit = (GRAPH.domeny || []).find(x => x.nazwa === dom);
+  if (hit) setTimeout(() => ENGINE?.follow("p" + hit.podmiot_id), 450);
+}
+
+/* ---------------- events ---------------- */
+let currentTab = "szukaj";
+function switchTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll("nav button").forEach(b => b.classList.toggle("on", b.dataset.tab === tab));
+  document.querySelectorAll(".view").forEach(v => v.classList.toggle("on", v.id === "view-" + tab));
+  if (tab === "graph") buildGraph();
+}
+document.querySelectorAll("nav button").forEach(b => b.onclick = () => switchTab(b.dataset.tab));
+
+$("#s-run").onclick = () => { const q = $("#s-in").value.trim(); if (q) { $("#s-out").innerHTML = ""; runSzukaj(q); } };
 $("#s-in").addEventListener("keydown", (ev) => { if (ev.key === "Enter") $("#s-run").click(); });
 $("#s-net").onclick = () => {
   netMode = netMode === "auto" ? "internet" : netMode === "internet" ? "local" : "auto";
@@ -946,76 +644,23 @@ $("#s-net").onclick = () => {
   $("#s-net").style.color = netMode === "internet" ? "var(--cy)" : "";
 };
 $("#s-out").addEventListener("click", (ev) => {
-  const tr = ev.target.closest("tr.row");
-  if (tr) { showPodmiot(Number(tr.dataset.id)); return; }
+  const row = ev.target.closest(".lrow.row");
+  if (row) { showPodmiot(Number(row.dataset.id)); return; }
   const deep = ev.target.closest("[data-deep]");
-  if (deep) {
-    document.querySelector('nav button[data-tab="discover"]').click();
-    $("#disc-in").value = deep.dataset.deep;
-    $("#disc-run").click();
-    return;
-  }
+  if (deep) { document.getElementById("deep-spin")?.remove(); deepRecon(deep.dataset.deep, false); return; }
   const go = ev.target.closest("[data-goto]");
   if (go) gotoGraph(go.dataset.goto);
 });
-// skocz do grafu i wyceluj kamerę w podmiot z domeną dom
-async function gotoGraph(dom) {
-  // najpierw świeże dane do cache (internet dopiero co wpisał encje),
-  // potem tab-switch: buildGraph zobaczy GRAPH i zrobi JEDEN render bez fetcha
-  try { GRAPH = await api("/api/graph"); } catch { return; }
-  document.querySelector('nav button[data-tab="graph"]').click();
-  const hit = (GRAPH.domeny || []).find(d => d.nazwa === dom);
-  if (hit) setTimeout(() => ENGINE?.follow("p" + hit.podmiot_id), 450);
-}
 
-/* ---------------- events ---------------- */
-$$("nav button").forEach(b => b.onclick = () => {
-  $$("nav button").forEach(x => x.classList.remove("on"));
-  b.classList.add("on");
-  $$(".view").forEach(v => v.classList.remove("on"));
-  $("#view-" + b.dataset.tab).classList.add("on");
-  // lista podmiotów (fallback/testowy zestaw) towarzyszy tylko grafowi
-  $("#list-pane").style.display = b.dataset.tab === "graph" ? "flex" : "none";
-  if (b.dataset.tab === "graph") buildGraph();
-  if (b.dataset.tab === "tenders") loadTenders();
-  if (b.dataset.tab === "surface") loadSurface();
-  if (b.dataset.tab === "discover") $("#disc-in").focus();
-  if (b.dataset.tab === "szukaj") $("#s-in").focus();
-});
-
-let deb;
-$("#q").addEventListener("input", () => { clearTimeout(deb); deb = setTimeout(loadPodmioty, 250); });
-["#f-sektor", "#f-kontakt"].forEach(s => $(s).onchange = loadPodmioty);
-$$("th[data-sort]").forEach(th => th.onclick = () => { if (th.dataset.sort) { sortKey = th.dataset.sort; loadPodmioty(); } });
-$("#tbody").addEventListener("click", (ev) => {
-  const tr = ev.target.closest("tr.row");
-  if (tr) showPodmiot(Number(tr.dataset.id));
-});
-$("#dq-run").onclick = () => { const q = $("#dq-in").value.trim(); if (q) runQuery(q); };
-$("#dq-in").addEventListener("keydown", (ev) => { if (ev.key === "Enter") $("#dq-run").click(); });
-$("#dq-export").onclick = () => {
-  const rows = [...$("#console-out").querySelectorAll(".rrow")].map(d => d.textContent);
-  if (!rows.length) return toast("nic do eksportu — najpierw uruchom zapytanie", "err");
-  const blob = new Blob([rows.join("\n")], { type: "application/jsonl" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob); a.download = "scryer-query.jsonl"; a.click();
-  toast("eksport scryer-query.jsonl", "ok");
-};
-$("#refresh").onclick = () => { loadStats(); loadPodmioty(); if (graphBuilt) buildGraph(); };
 document.addEventListener("keydown", (ev) => {
-  const typing = ["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement.tagName);
-  if (ev.key === "/" && !typing) { ev.preventDefault(); document.querySelector('nav button[data-tab="szukaj"]').click(); }
-  if (ev.key === "`" && !typing) { ev.preventDefault(); $("#dq-in").focus(); }
-  if (ev.key.toLowerCase() === "d" && !typing) { ev.preventDefault(); document.querySelector('nav button[data-tab="discover"]').click(); }
-  if (ev.key === "Escape") $("#drawer-close").click();
-  if (ev.key.toLowerCase() === "r" && !typing) $("#refresh").click();
+  const typing = ["INPUT", "TEXTAREA"].includes(document.activeElement.tagName);
+  if (ev.key === "/" && !typing) { ev.preventDefault(); switchTab("szukaj"); $("#s-in").focus(); $("#s-in").select(); }
+  if (ev.key.toLowerCase() === "g" && !typing) switchTab("graph");
+  if (ev.key === "Escape") $("#drawer").classList.remove("on");
 });
 
 /* ---------------- boot ---------------- */
 loadStats();
-loadPodmioty();
-// SZUKAJ = landing (search-first); graf buduje się przy wejściu w zakładkę
-setInterval(loadStats, 30000);
 </script>
 </body>
 </html>
