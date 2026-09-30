@@ -100,7 +100,22 @@ fn cmd_demo() {
 }
 
 fn db_path() -> std::path::PathBuf {
-    std::path::PathBuf::from(std::env::var("SCRYER_DB").unwrap_or_else(|_| "scryer.db".into()))
+    if let Ok(p) = std::env::var("SCRYER_DB") {
+        return std::path::PathBuf::from(p);
+    }
+    // domyślnie STABILNA ścieżka użytkownika (XDG data), nie cwd — tak żeby
+    // przypadkiem nie wstać na fixture/testowej bazie z katalogu projektu
+    let data = std::env::var("XDG_DATA_HOME")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| {
+            let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
+            std::path::PathBuf::from(home).join(".local/share")
+        });
+    let p = data.join("scryer/session.db");
+    if let Some(dir) = p.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    p
 }
 
 fn cmd_import(paths: &[String]) {
