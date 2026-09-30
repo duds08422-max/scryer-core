@@ -61,7 +61,7 @@ pub async fn serve(db: PathBuf, host: &str, port: u16) -> Result<(), String> {
 
     let app = Router::new()
         .route("/", get(index))
-        .route("/assets/vis-network.min.js", get(asset_vis_js))
+        .route("/assets/graph-engine.js", get(asset_engine_js))
         .route("/api/stats", get(api_stats))
         .route("/api/podmioty", get(api_podmioty))
         .route("/api/podmiot/:id", get(api_podmiot))
@@ -85,11 +85,11 @@ async fn index() -> Html<&'static str> {
     Html(CONSOLE_HTML)
 }
 
-/// vis-network vendored w binarce — konsola działa bez internetu (air-gap OK).
-async fn asset_vis_js() -> impl IntoResponse {
+/// własny silnik grafu WebGL vendored w binarce — zero zależności (air-gap OK)
+async fn asset_engine_js() -> impl IntoResponse {
     (
         [(axum::http::header::CONTENT_TYPE, "application/javascript")],
-        ASSET_VIS_JS,
+        ASSET_ENGINE_JS,
     )
 }
 
@@ -579,4 +579,4 @@ fn persist_discovery(onto: &crate::ontology::Ontology, rep: &Value) {
 // -------------------------------------------------------------- konsola ---
 
 const CONSOLE_HTML: &str = include_str!("console.html");
-const ASSET_VIS_JS: &str = include_str!("assets/vis-network.min.js");
+const ASSET_ENGINE_JS: &str = include_str!("graph-engine.js");

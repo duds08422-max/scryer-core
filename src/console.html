@@ -39,18 +39,8 @@
   }
   code { color: var(--cy); font-size: 11px; }
 
-  /* ciemny tooltip vis-network (domyślny jest biały — brzydki) */
-  div.vis-tooltip {
-    background: rgba(8,13,22,.96) !important;
-    border: 1px solid var(--line3) !important;
-    border-radius: 4px !important;
-    color: var(--tx0) !important;
-    font: 11px/1.5 var(--mono) !important;
-    padding: 6px 10px !important;
-    box-shadow: 0 8px 24px rgba(0,0,0,.6) !important;
-    white-space: pre-line !important;
-    backdrop-filter: blur(6px);
-  }
+  /* tooltip renderuje silnik grafu (własny div); stary vis-tooltip martwy */
+  div.vis-tooltip { display: none !important; }
 
   /* ═══════════════ TOPBAR ═══════════════ */
   header {
@@ -355,7 +345,7 @@
       <path d="M16 2v6M16 24v6M2 16h6M24 16h6" stroke="#35e0a1" stroke-width="1.2" opacity=".5"/>
     </svg>
     <span class="word">SCR<em>Y</em>ER</span>
-    <span class="ver">v0.7.1</span>
+    <span class="ver">v0.8.0</span>
   </div>
   <div id="stats"></div>
   <div class="topright">
@@ -603,29 +593,12 @@ document.addEventListener("click", (ev) => {
   if (em) { navigator.clipboard?.writeText(em.dataset.copy); toast("skopiowano " + em.dataset.copy, "ok"); }
 });
 
-/* ---------------- graf ---------------- */
-let graphBuilt = false, GRAPH = null, nodes, edges;
-let visLoading = null;
-function loadVis() {
-  if (typeof vis !== "undefined") return Promise.resolve();
-  if (visLoading) return visLoading;
-  visLoading = new Promise((ok, bad) => {
-    // lokalnie z binarki → fallback CDN → błąd z jasnym komunikatem
-    const tryUrl = (url, fail) => {
-      const s = document.createElement("script");
-      s.src = url;
-      s.onload = ok;
-      s.onerror = fail;
-      document.head.appendChild(s);
-    };
-    tryUrl("/assets/vis-network.min.js", () =>
-      tryUrl("https://unpkg.com/vis-network/standalone/umd/vis-network.min.js", () =>
-        bad(new Error("vis-network niedostępny (lokal i CDN)"))
-      )
-    );
-  });
-  return visLoading;
-}
+/* ---------------- graf — WŁASNY SILNIK WEBGL (zero deps) ---------------- */
+</script>
+<script src="/assets/graph-engine.js"></script>
+<script>
+"use strict";
+let graphBuilt = false, GRAPH = null, ENGINE = null;
 
 /* diagnostyka grafu — widać na ekranie KAŻDY krok startu */
 function gdiag(msg, bad) {
@@ -647,9 +620,8 @@ async function buildGraph() {
       GRAPH = await api("/api/graph");
       gdiag(`dane OK: ${GRAPH.podmioty?.length ?? "?"} podmiotów`);
     }
-    gdiag("ładowanie vis-network");
-    await loadVis();
-    gdiag("vis OK, render");
+    if (typeof GraphEngine === "undefined") throw new Error("graph-engine.js nie załadowany");
+    gdiag("silnik: własny WebGL, zero deps");
     graphBuilt = true;
     renderGraph();
   } catch (e) {
@@ -666,6 +638,7 @@ function renderGraph() {
       .filter(([k]) => !["other","water","health","admin"].includes(k))
       .map(([k, c]) => `<span class="lg"><i style="background:${c}"></i>${k}</span>`).join("");
   }
+  // HOT-podmioty są większe i z halo — tryb „radar” jak w konsolach intel
   for (const p of GRAPH.podmioty) {
     if (onlyHot && p.score < 15) continue;
     const hot = p.score >= 15;
@@ -673,102 +646,68 @@ function renderGraph() {
       id: "p" + p.id,
       label: p.nazwa.length > 36 ? p.nazwa.slice(0, 35) + "…" : p.nazwa,
       title: `${p.nazwa}\nscore: ${p.score}\nmiasto: ${p.miasto || "—"}\n(klik = profil)`,
-      shape: "box",
-      shapeProperties: { borderRadius: 4 },
-      margin: 7,
-      borderWidth: hot ? 1.5 : 1,
-      color: {
-        background: hot ? "#241410" : "#0e1726",
-        border: hot ? "#ff7d5c" : "#22334e",
-        highlight: { background: "#15243c", border: colorOf(p.sektor) },
-        hover: { background: "#15243c", border: colorOf(p.sektor) },
-      },
-      font: { face: "JetBrains Mono, monospace", size: 10.5, color: hot ? "#ffb8a3" : "#9fb0ca" },
+      kind: "podmiot",
+      color: colorOf(p.sektor),
+      size: hot ? 15 : 11,
+      hot,
     });
   }
   if (showD) for (const d of GRAPH.domeny) {
     n.push({
-      id: "d" + d.id, label: d.nazwa, shape: "dot",
-      size: 4.5, color: { background: d.mx ? "#55c8ff" : "#2c3c58", border: "transparent" },
-      font: { size: 9, color: "#5d7089", face: "JetBrains Mono, monospace" },
+      id: "d" + d.id, label: d.nazwa, kind: "domena",
+      size: 7, color: d.mx ? "#55c8ff" : "#2c3c58",
       title: `${d.nazwa}\nMX: ${d.mx ? "tak" : "nie"}\nDMARC: ${d.dmarc || "BRAK"}`,
     });
-    e.push({ from: "p" + d.podmiot_id, to: "d" + d.id, color: { color: "rgba(90,120,180,.14)" } });
+    e.push({ s: "p" + d.podmiot_id, t: "d" + d.id, color: "#5a78b4", alpha: 0.16, len: 120 });
   }
   if (showO) for (const o of GRAPH.osoby) {
     const got = emailed.has(o.email);
     n.push({
-      id: "o" + o.id, label: got ? "✉ " + o.email : o.email, shape: "dot", size: 3.5,
-      color: { background: got ? "#35e0a1" : "#28374f", border: "transparent" },
-      font: { size: 9, color: got ? "#35e0a1" : "#42536d", face: "JetBrains Mono, monospace" }, title: o.email,
+      id: "o" + o.id, label: got ? "✉ " + o.email : o.email, kind: "osoba",
+      size: 5.5, color: got ? "#35e0a1" : "#28374f", title: o.email,
     });
-    e.push({ from: "p" + o.podmiot_id, to: "o" + o.id, color: { color: "rgba(90,120,180,.1)" } });
+    e.push({ s: "p" + o.podmiot_id, t: "o" + o.id, color: "#5a78b4", alpha: 0.11, len: 95 });
   }
-  nodes = new vis.DataSet(n); edges = new vis.DataSet(e);
   const container = $("#graph");
-  const cw = container.clientWidth, ch = container.clientHeight;
-  gdiag(`węzły: ${n.length}, kontener: ${cw}×${ch}px`);
+  gdiag(`węzły: ${n.length}, krawędzie: ${e.length}`);
   if (!n.length) {
     container.innerHTML = '<div class="empty" style="position:absolute;inset:0">brak węzłów — rozluźnij filtry</div>';
     $("#g-count").textContent = "0 węzłów";
     return;
   }
-  // kontener o zerowym rozmiarze = vis narysuje 0×0 canvas („pusto”);
-  // czekamy 200ms i próbujemy raz jeszcze zanim poddamy diagnostykę
-  if (cw < 50 || ch < 50) {
+  // kontener spłaszczony → silnik sam poczeka na ResizeObserver; ale nie buduj
+  // ślepo przy 0px — jeden retry dla wyrobienia się layoutu zakładki
+  if (container.clientWidth < 50 || container.clientHeight < 50) {
     gdiag("kontener spłaszczony — retry za 200ms", true);
     setTimeout(() => renderGraph(), 200);
     return;
   }
-  container.innerHTML = '<div id="graph-msg">stabilizacja</div><div class="scanline"></div>';
-  let network;
-  try {
-    network = new vis.Network(container, { nodes, edges }, {
-    autoResize: true,
-    physics: {
-      solver: "barnesHut",
-      barnesHut: { gravitationalConstant: -3200, springConstant: 0.045, springLength: 110, damping: 0.45, avoidOverlap: 0.1 },
-      stabilization: { enabled: true, iterations: 220, fit: true },
-    },
-    interaction: { hover: true, tooltipDelay: 140, hideEdgesOnDrag: true },
-    nodes: { shape: "box", font: { face: "JetBrains Mono, monospace" } },
-    edges: { color: { color: "#1c2a44" }, smooth: false, selectionWidth: 1.5 },
+  if (!ENGINE) {
+    ENGINE = GraphEngine(container, {
+      onDiag: (m, bad) => gdiag(m, bad),
+      onCounts: (nv, ev) => { $("#g-count").textContent = `${nv} węzłów · ${ev} krawędzi`; },
+      onProgress: (p) => {
+        const msg = $("#graph-msg");
+        if (p === null) { msg?.remove(); container.querySelector(".scanline")?.remove(); }
+        else if (msg) msg.textContent = `stabilizacja ${Math.round(p * 100)}%`;
+      },
+      onSelect: (node) => {
+        if (node && node.kind === "podmiot") showPodmiot(Number(String(node.id).slice(1)));
+      },
     });
-  } catch (err) {
-    gdiag("vis.Network throw: " + err.message, true);
-    return;
+    gdiag("GraphEngine utworzony");
+  } else {
+    // rebuild po zmianie filtrów — wyczyść kontener z empty-state jeśli był
+    container.querySelector(".empty")?.remove();
+    const msg = document.createElement("div");
+    msg.id = "graph-msg"; msg.textContent = "stabilizacja";
+    container.insertBefore(msg, container.firstChild);
+    if (!container.querySelector(".scanline")) {
+      const sl = document.createElement("div"); sl.className = "scanline";
+      container.appendChild(sl);
+    }
   }
-  gdiag("Network utworzony");
-  network.on("stabilizationProgress", (p) => {
-    $("#graph-msg").textContent = `stabilizacja ${Math.round((p.iterations / p.total) * 100)}%`;
-  });
-  network.on("stabilizationIterationsDone", () => {
-    $("#graph-msg")?.remove();
-    container.querySelector(".scanline")?.remove();
-    network.fit();
-  });
-  network.on("click", (params) => {
-    const id = params.nodes[0];
-    if (id && String(id).startsWith("p")) showPodmiot(Number(String(id).slice(1)));
-  });
-  // vis słucha WYŁĄCZNIE na window.resize — zmiana kontenera (drawer!) jej nie
-  // łapie; redraw() też nie skaluje canvasa. Jedyny skuteczny fix: wystrzelić
-  // window.resize + fit, gdy rozmiar #graph się zmieni.
-  if (window._graphRO) window._graphRO.disconnect();
-  clearTimeout(window._grz);
-  window._graphRO = new ResizeObserver(() => {
-    clearTimeout(window._grz);
-    window._grz = setTimeout(() => {
-      window.dispatchEvent(new Event("resize"));
-      network.fit();
-    }, 90);
-  });
-  window._graphRO.observe(container);
-  // po stabilizacji upewnij się, że canvas ma niezerowe wymiary
-  network.once("stabilizationIterationsDone", () => {
-    const cv = container.querySelector("canvas");
-    gdiag(cv ? `canvas: ${cv.clientWidth}×${cv.clientHeight}px` : "BRAK canvas w DOM!", !cv || cv.clientWidth < 10);
-  });
+  ENGINE.setData({ nodes: n, edges: e });
   $("#g-count").textContent = `${n.length} węzłów · ${e.length} krawędzi`;
 }
 $("#g-rerender").onclick = () => { GRAPH = null; buildGraph(); };
