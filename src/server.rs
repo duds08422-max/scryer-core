@@ -69,6 +69,7 @@ pub async fn serve(db: PathBuf, host: &str, port: u16) -> Result<(), String> {
         .route("/api/tenders", get(api_tenders))
         .route("/api/graph", get(api_graph))
         .route("/api/discover", post(api_discover))
+        .route("/api/ai", post(api_ai))
         .route("/api/attack-surface", get(api_attack_surface))
         .with_state(state);
 
@@ -77,7 +78,7 @@ pub async fn serve(db: PathBuf, host: &str, port: u16) -> Result<(), String> {
         .await
         .map_err(|e| format!("bind {addr}: {e}"))?;
     println!("scryer-core serve: http://{addr}  (db: {})", db.display());
-    println!("  endpointy: /api/stats /api/podmioty /api/podmiot/:id /api/query /api/tenders /api/graph /api/attack-surface");
+    println!("  endpointy: /api/stats /api/podmioty /api/podmiot/:id /api/query /api/tenders /api/graph /api/ai /api/discover /api/attack-surface");
     axum::serve(listener, app).await.map_err(|e| e.to_string())
 }
 
@@ -452,6 +453,131 @@ async fn api_graph(State(s): State<S>) -> ApiResult {
     };
 
     Ok(Json(json!({ "podmioty": pods, "domeny": doms, "osoby": osoby, "emailed": emailed })))
+}
+
+// ------------------------------------------------------------------- ai ---
+
+#[derive(Deserialize)]
+struct AiBody {
+    q: String,
+    /// execute=false → tylko plan ("rozumiem jako"), bez SQL/sieci
+    #[serde(default)]
+    dry: bool,
+}
+
+async fn api_ai(State(s): State<S>, Json(body): Json<AiBody>) -> ApiResult {
+    use crate::intel::{self, Target};
+
+    let plan = intel::plan(&body.q);
+    if plan.target != Target::External && plan.preds.is_empty() {
+        return Err(AppError(
+            StatusCode::BAD_REQUEST,
+            "nie rozumiem zapytania — spróbuj: 'wodociągi bez kontaktu', 'hot bez dmarc', 'recon <domena>'".to_string(),
+        ));
+    }
+
+    if body.dry {
+        return Ok(Json(json!({
+            "mode": if plan.target == Target::External { "external" } else { "local" },
+            "said": plan.said,
+            "conf": plan.conf,
+            "dry": true,
+        })));
+    }
+
+    if plan.target == Target::External {
+        // localization + recon poza async-ctx (sieć w spawn_blocking, osobny conn)
+        let q = plan.external_q.clone().unwrap_or_default();
+        let s2 = s.clone();
+        let target_name = q.clone();
+        let localized = tokio::task::spawn_blocking(move || {
+            let onto = lock_onto(&s2);
+            intel_localize(&onto, &target_name)
+        })
+        .await
+        .map_err(|e| AppError(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+        let rep = run_external_recon(&localized).await?;
+
+        // persist na głównym conn + audyt
+        {
+            let onto = lock_onto(&s);
+            persist_discovery(&onto, &rep);
+            onto.log_audyt("ai", "recon", &format!("{} → {}", body.q, rep["domain"].as_str().unwrap_or("-")));
+        }
+        return Ok(Json(json!({
+            "mode": "external",
+            "said": plan.said,
+            "conf": plan.conf,
+            "q": q,
+            "report": rep,
+        })));
+    }
+
+    // LOCAL: SQL pod Mutexem — bez sieci, natychmiast
+    let out = {
+        let onto = lock_onto(&s);
+        intel::execute(&onto, &plan).map_err(err500)?
+    };
+    lock_onto(&s).log_audyt("ai", "local", &format!("{} → {}", body.q, out["said"].as_str().unwrap_or("")));
+    Ok(Json(out))
+}
+
+/// Jeśli celem jest podmiot z bazy, użyj jego domeny zamiast zgadywania DDG.
+fn intel_localize(onto: &crate::ontology::Ontology, target: &str) -> String {
+    let c = onto.conn();
+    let fold = crate::ontology::fold_str(target);
+    // domena/e-mail → ustaw domenę wprost (jak discovery::normalize)
+    if fold.contains('.') && !fold.contains(' ') {
+        let dom = fold
+            .trim_start_matches("http://")
+            .trim_start_matches("https://")
+            .trim_start_matches("www.")
+            .split('/')
+            .next()
+            .unwrap_or("")
+            .to_string();
+        if dom.contains('.') {
+            return dom;
+        }
+    }
+    if fold.contains('@') {
+        if let Some(dom) = fold.split('@').nth(1) {
+            if !dom.is_empty() {
+                return dom.to_string();
+            }
+        }
+    }
+    // fraza → podmiot z bazy? fold_search po nazwie, weź jego domenę
+    let Ok(mut stmt) = c.prepare(
+        "SELECT COALESCE((SELECT nazwa FROM domena WHERE podmiot_id = p.id AND nazwa LIKE '%.%' LIMIT 1), '') \
+         FROM podmiot p WHERE fold_search(p.nazwa, ?1) LIMIT 1")
+    else {
+        return target.to_string();
+    };
+    match stmt.query_row([fold.as_str()], |r| r.get::<_, String>(0)) {
+        Ok(dom) if !dom.is_empty() => dom,
+        _ => target.to_string(),
+    }
+}
+
+/// recon zewnętrzny (discovery pipeline) — spawn_blocking, osobne połączenie.
+async fn run_external_recon(query: &str) -> Result<serde_json::Value, AppError> {
+    use crate::discovery;
+    let q = query.to_string();
+    let db = DB_PATH
+        .get()
+        .cloned()
+        .ok_or_else(|| AppError(StatusCode::INTERNAL_SERVER_ERROR, "brak ścieżki DB".into()))?;
+    tokio::task::spawn_blocking(move || -> Result<serde_json::Value, String> {
+        let onto = crate::ontology::Ontology::open(&db).map_err(|e| e.to_string())?;
+        onto.register_sql_functions();
+        let nq = discovery::normalize(&q);
+        Ok(discovery::discover(&nq))
+    })
+    .await
+    .map_err(|e| AppError(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .map_err(err500)
 }
 
 // ------------------------------------------------------- attack surface ---

@@ -7,7 +7,7 @@
 //!   demo                               — generuje seed demo i odpala score (dla leniwych)
 
 use scryer_core::model::Lead;
-use scryer_core::{bzp, export, ontology, query, score, send, server, store, viz};
+use scryer_core::{bzp, export, intel, ontology, query, score, send, server, store, viz};
 use std::path::Path;
 
 fn main() {
@@ -33,7 +33,7 @@ fn main() {
             eprintln!("  scryer-core report                            (statystyki kampanii z outbox.jsonl)");
             eprintln!("  scryer-core tenders <bzp.json>                (scoring przetargow BZP pod Talus; SCRYER_OUT=csv)");
             eprintln!("  scryer-core import <seeds...>               (migracja seedów/outboxu do ontologii; SCRYER_DB=scryer.db)");
-            eprintln!("  scryer-core ask <zapytanie>                 (przykłady: hot-nodmarc | bez-kontaktu-30d | stats)");
+            eprintln!("  scryer-core ask <zapytanie>                 (NL-ai: 'wodociagi bez kontaktu' | dQuery: hot-nodmarc | bez-kontaktu-30d | stats)");
             eprintln!("  scryer-core viz                              (graf ontologii -> HTML; SCRYER_VIZ=out.html)");
             eprintln!("  scryer-core serve                            (zywa konsola + API; SCRYER_DB, SCRYER_HOST=127.0.0.1, SCRYER_PORT=8787)");
             eprintln!("  scryer-core discover <domena|email|fraza>    (OSINT: DNS+RDAP+crt.sh+WWW+search → ontologia; SCRYER_DNS, SCRYER_SEARCH_KEY)");
@@ -142,6 +142,34 @@ fn cmd_import(paths: &[String]) {
 fn cmd_ask(q: &str) {
     let o = ontology::Ontology::open(&db_path()).expect("otwarcie ontologii");
     if q != "hot-nodmarc" && q != "bez-kontaktu-30d" && q != "stats" {
+        // spróbuj NL (intel); jak zrozumie — wykona; jak nie — dQuery
+        let plan = intel::plan(q);
+        if !plan.preds.is_empty() || plan.target == intel::Target::External {
+            println!("AI: {}", plan.said);
+            match intel::execute(&o, &plan) {
+                Ok(out) => {
+                    if out["mode"] == "external" {
+                        let eq = out["q"].as_str().unwrap_or("");
+                        let nq = scryer_core::discovery::normalize(eq);
+                        let rep = scryer_core::discovery::discover(&nq);
+                        let dom = rep["domain"].as_str().unwrap_or("");
+                        if !dom.is_empty() {
+                            persist_report(&o, &rep);
+                        }
+                        println!("{}", serde_json::to_string_pretty(&rep).unwrap_or_default());
+                    } else {
+                        println!("wyników: {}", out["count"]);
+                        if let Some(items) = out["items"].as_array() {
+                            for it in items.iter().take(30) {
+                                println!("  {}", item_line(it));
+                            }
+                        }
+                    }
+                }
+                Err(e) => eprintln!("błąd: {e}"),
+            }
+            return;
+        }
         match query::parse(q) {
             Ok(parsed) => {
                 let rows = query::run(&o, &parsed).unwrap_or_else(|e| panic!("{e}"));
@@ -181,6 +209,47 @@ fn cmd_ask(q: &str) {
             eprintln!("nieznane zapytanie: {other}. Dostępne: hot-nodmarc | bez-kontaktu-30d | stats");
             std::process::exit(2);
         }
+    }
+}
+
+fn persist_report(o: &ontology::Ontology, rep: &serde_json::Value) {
+    // identyczna logika persistu jak w server::persist_discovery (CLI skrót)
+    let dom = rep["domain"].as_str().unwrap_or("");
+    if dom.is_empty() {
+        return;
+    }
+    let dns = &rep["dns"];
+    let pid = o.podmiot_id_by_domena(dom);
+    let has_mail = dns["has_mail"].as_bool().unwrap_or(false);
+    let _ = match pid {
+        Some(p) => o.upsert_domena(dom, has_mail, p),
+        None => o.upsert_domena_free(dom, has_mail),
+    };
+    o.set_domena_mail(
+        dom,
+        dns["spf"].as_array().and_then(|a| a[0].as_str()),
+        dns["dmarc"].as_array().and_then(|a| a[0].as_str()),
+    );
+    o.log_audyt("cli-ai", "recon", dom);
+}
+
+/// jednolinijkowy wydruk podmiotu/interakcji z JSON wyniku AI
+fn item_line(it: &serde_json::Value) -> String {
+    if let Some(nazwa) = it["nazwa"].as_str() {
+        format!(
+            "[{:>3}] {:36} {:14} {:16} pop={}",
+            it["score"].as_i64().unwrap_or(0),
+            nazwa,
+            it["sektor"].as_str().unwrap_or("-"),
+            it["miasto"].as_str().unwrap_or("-"),
+            it["pop"].as_i64().unwrap_or(0),
+        )
+    } else if let Some(email) = it["email"].as_str() {
+        format!("  ✉ {} — {}", email, it["temat"].as_str().unwrap_or(""))
+    } else if let Some(tytul) = it["tytul"].as_str() {
+        format!("  [{}] {} — {}", it["score"].as_i64().unwrap_or(0), tytul, it["org"].as_str().unwrap_or(""))
+    } else {
+        it.to_string()
     }
 }
 

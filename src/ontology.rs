@@ -519,6 +519,11 @@ fn now_secs() -> i64 {
 
 /// ASCII-fold + lowercase: ł→l, ó→o itd. Dla wyszukiwania bez diakrytyków.
 fn fold_search(s: &str) -> String {
+    fold_str(s)
+}
+
+/// Publiczny fold (używa też intel/server) — ł→l, ó→o, lower.
+pub fn fold_str(s: &str) -> String {
     s.chars()
         .map(|c| match c {
             'ą' | 'Ą' => 'a',
