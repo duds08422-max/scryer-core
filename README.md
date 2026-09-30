@@ -6,6 +6,8 @@ briefami mailowymi.
 
 > Talus patrzy do środka hosta. **Scryer patrzy na Twoją ekspozycję zewnętrzną.**
 
+**Strona produktu:** [hartwell-labs.pl/scryer-core](https://hartwell-labs.pl/scryer-core/)
+
 ## Zasady
 
 1. **Code over claims** — 62 testy jednostkowe, parser DNS testowany na
