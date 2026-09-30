@@ -12,6 +12,7 @@ pub mod discovery;
 pub mod dnsmini;
 pub mod enrich;
 pub mod export;
+pub mod graphx;
 pub mod intel;
 pub mod model;
 pub mod ontology;

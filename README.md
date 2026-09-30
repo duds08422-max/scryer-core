@@ -82,12 +82,30 @@ src/
 └── report.rs   — raport konsolowy
 ```
 
+## Analityka powiązań (link analysis)
+
+Graf ontologii (podmiot↔domena↔osoba + **hub-y wspólnej infrastruktury**)
+z pełną analizą: komponenty spójności, mosty (single points of failure),
+najkrótsze ścieżki, wspólni sąsiedzi.
+
+**Inferencja ukrytych relacji:** jeśli dwie organizacje mają ten sam MX/NS/IP
+(pasywny DNS, zero skanowania) — graf łączy je hubem `i:mx:…` / `i:ns:…` / `i:ip:…`.
+"Ci dwi grają z tym samym dostawcą" — widoczne od razu, bez żadnego LLM.
+
+```
+scryer-core serve   # konsola: zakładka Graf (⚠ mosty) + Timeline
+GET /api/graph/stats     # skala, spójność, kruchość, liczba hubów
+GET /api/graph/bridges   # krawędzie krytyczne
+GET /api/graph/path?from=p:1&to=d:7
+GET /api/timeline?limit=300   # interakcje + audyt jednym strumieniem
+```
+
 ## Mapa drogowa
 
 - [x] MVP: pipeline scoring + CSV Brevo
 - [x] Pasywny DNS-audit + briefy
+- [x] Graf powiązań (org↔domena↔osoba + wspólne MX/NS/IP) + timeline
 - [ ] Konektory BZP/BIP (harmonogram: po domknięciu kampanii E1)
-- [ ] Graf powiązań (org↔domena↔IP) + timeline
 - [ ] Integracja z Talusem (zdarzenia jako sygnały do scoringu)
 
 ---

@@ -126,6 +126,16 @@ impl Ontology {
         );
     }
 
+    /// Zapis wskaźnika infrastruktury (pasywny DNS): ip/mx/ns → domena.
+    /// Idempotentny (UNIQUE typ+wartość+domena); odświeża zobaczono_ts.
+    pub fn upsert_wskaznik(&self, typ: &str, wartosc: &str, domena_id: i64) {
+        let _ = self.conn.execute(
+            "INSERT INTO wskaznik (typ, wartosc, domena_id) VALUES (?1, ?2, ?3)
+             ON CONFLICT(typ, wartosc, domena_id) DO UPDATE SET zobaczono_ts = unixepoch()",
+            params![typ, wartosc, domena_id],
+        );
+    }
+
     /// OSINT-first: podmiot dla domeny — istnieje → id; nie ma → tworzy encję
     /// (nazwa z audytu WWW lub sama domena, sektor 'websearch'). Idempotentny.
     pub fn ensure_podmiot_by_domena(&self, domena: &str, nazwa: Option<&str>) -> SqlResult<i64> {
@@ -549,6 +559,18 @@ CREATE TABLE IF NOT EXISTS audyt (
   akcja TEXT NOT NULL,
   szczegoly TEXT
 );
+
+-- Wskaźniki infrastruktury (pasywny DNS): IP/MX/NS obserwowane dla domeny.
+-- Podstawa inference "wspólna infra" (dwa podmioty na tym samym MX/NS/IP).
+CREATE TABLE IF NOT EXISTS wskaznik (
+  id INTEGER PRIMARY KEY,
+  typ TEXT NOT NULL,            -- 'ip' | 'mx' | 'ns'
+  wartosc TEXT NOT NULL,
+  domena_id INTEGER NOT NULL REFERENCES domena(id),
+  zobaczono_ts INTEGER DEFAULT (unixepoch()),
+  UNIQUE(typ, wartosc, domena_id)
+);
+CREATE INDEX IF NOT EXISTS idx_wskaznik_val ON wskaznik(typ, wartosc);
 "#;
 
 fn now_secs() -> i64 {

@@ -226,6 +226,28 @@
   #legend .lg { display: flex; gap: 6px; align-items: center; color: var(--tx2); font-size: 10px; letter-spacing: .5px; }
   #legend .lg i { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
   #g-count { margin-left: auto; color: var(--tx3); font-size: 10px; letter-spacing: 1px; font-variant-numeric: tabular-nums; }
+  .gbtn.warn { color: #ff5470; border-color: rgba(255,84,112,.5); }
+
+  /* ══════════════════ TIMELINE ══════════════════ */
+  #view-timeline { overflow-y: auto; }
+  #tl-bar {
+    display: flex; gap: 12px; align-items: baseline; padding: 12px 20px 8px;
+    position: sticky; top: 0; background: var(--bg); z-index: 2;
+    border-bottom: 1px solid var(--line);
+  }
+  #tl-tag { color: var(--ac); font-size: 10px; letter-spacing: 2px; }
+  #tl-meta { color: var(--tx3); font-size: 10.5px; }
+  #tl-out { padding: 6px 20px 20px; }
+  .trow {
+    display: flex; gap: 12px; align-items: baseline; padding: 5px 0;
+    border-bottom: 1px solid rgba(255,255,255,.03); font-size: 12px;
+  }
+  .trow .tt { color: var(--tx3); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+  .trow .ts { font-size: 9px; letter-spacing: 1.5px; flex-shrink: 0; width: 44px; }
+  .trow .ty { color: var(--tx2); flex-shrink: 0; min-width: 110px; }
+  .trow .to { color: var(--tx); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .trow .tp { color: var(--cy); cursor: pointer; flex-shrink: 0; }
+  .trow .tp:hover { text-decoration: underline; }
 
   /* ══════════════════ DRAWER ══════════════════ */
   #drawer {
@@ -293,6 +315,7 @@
 <nav>
   <button data-tab="szukaj" class="on">Szukaj</button>
   <button data-tab="graph">Graf <span class="badge" id="b-graph">0</span></button>
+  <button data-tab="timeline">Timeline</button>
 </nav>
 
 <main>
@@ -314,8 +337,17 @@
     <div class="g-ctl">
       <span id="legend"></span>
       <button class="gbtn" id="g-fit" title="dopasuj widok">⤢ fit</button>
+      <button class="gbtn" id="g-bridges" title="mosty = krawędzie krytyczne (single points of failure)">⚠ mosty</button>
       <span id="g-count"></span>
     </div>
+  </div>
+
+  <div class="view" id="view-timeline" style="flex-direction:column">
+    <div id="tl-bar">
+      <span id="tl-tag">TIMELINE</span>
+      <span id="tl-meta">interakcje + audyt — kinetyka ontologii</span>
+    </div>
+    <div id="tl-out"></div>
   </div>
 
   <div id="drawer">
@@ -431,6 +463,10 @@ async function buildGraph() {
 
 function renderGraph() {
   const n = [], e = [];
+  const strip = (x) => String(x).replace(":", "");
+  const canon = (a, b) => [strip(a), strip(b)].sort().join("|");
+  const edgeMaybeBridge = (s, t, color, alpha, len) =>
+    BRIDGES && BRIDGES.has(canon(s, t)) ? { s, t, color: "#ff5470", alpha: 0.75, len: len || 95 } : { s, t, color, alpha, len };
   for (const p of GRAPH.podmioty) {
     const hot = p.score >= 15;
     n.push({
@@ -449,7 +485,17 @@ function renderGraph() {
       size: 6, color: d.mx ? "#55c8ff" : "#2c3c58",
       title: `${d.nazwa}\nMX: ${d.mx ? "tak" : "nie"}\nDMARC: ${d.dmarc || "BRAK"}`,
     });
-    e.push({ s: "p" + d.podmiot_id, t: "d" + d.id, color: "#5a78b4", alpha: 0.10, len: 150 });
+    e.push(edgeMaybeBridge("p" + d.podmiot_id, "d" + d.id, "#5a78b4", 0.10, 150));
+  }
+  for (const h of (GRAPH.hubs || [])) {
+    const hubId = `i${h.typ}:${h.wartosc}`;
+    const isMX = h.typ === "mx";
+    n.push({
+      id: hubId, label: `${isMX ? "✉" : h.typ === "ns" ? "DNS" : "NET"} ${h.wartosc.length > 26 ? h.wartosc.slice(0, 25) + "…" : h.wartosc}`,
+      kind: "hub", size: 8, color: isMX ? "#f0b64e" : "#9d7bd8",
+      title: `${h.typ.toUpperCase()} współdzielone przez ${h.domena_ids.length} domen\n(klik = podświetl w grafie)`,
+    });
+    for (const d of h.domena_ids) e.push(edgeMaybeBridge(hubId, "d" + d, "#f0b64e", 0.22, 130));
   }
   if ((GRAPH.osoby || []).length <= 120) {
     const emailed = new Set(GRAPH.emailed || []);
@@ -459,11 +505,12 @@ function renderGraph() {
         id: "o" + o.id, label: got ? "✉ " + o.email : o.email, kind: "osoba",
         size: 4.5, color: got ? "#35e0a1" : "#28374f", title: o.email,
       });
-      e.push({ s: "p" + o.podmiot_id, t: "o" + o.id, color: "#5a78b4", alpha: 0.07, len: 120 });
+      e.push(edgeMaybeBridge("p" + o.podmiot_id, "o" + o.id, "#5a78b4", 0.07, 120));
     }
   }
 
-  $("#g-count").textContent = `${n.length} węzłów · ${e.length} krawędzi`;
+  const hubCount = (GRAPH.hubs || []).length;
+  $("#g-count").textContent = `${n.length} węzłów · ${e.length} krawędzi` + (hubCount ? ` · ${hubCount} wspólna infra` : "");
   $("#b-graph").textContent = (GRAPH.podmioty || []).length;
 
   const container = $("#graph");
@@ -501,7 +548,30 @@ function renderGraph() {
 }
 
 $("#g-fit").onclick = () => ENGINE?.fitView(true);
-$("#refresh").onclick = async () => { await loadStats(); if (currentTab === "graph") buildGraph(); };
+
+/* -------- mosty: podświetl krawędzie krytyczne (single points of failure) -------- */
+let BRIDGES = null;
+$("#g-bridges").onclick = async () => {
+  const btn = $("#g-bridges");
+  if (BRIDGES) { // wyłącz
+    BRIDGES = null;
+    btn.classList.remove("warn");
+    btn.textContent = "⚠ mosty";
+    buildGraph();
+    return;
+  }
+  try {
+    const d = await api("/api/graph/bridges");
+    BRIDGES = new Set((d.bridges || []).map(b => [stripNodeId(b.a), stripNodeId(b.b)].sort().join("|")));
+    if (!BRIDGES.size) { gdiag("brak mostów — brak SPOF-ów na krawędziach (graf gęsty/cykliczny)"); BRIDGES = null; return; }
+    btn.classList.add("warn");
+    btn.textContent = `⚠ mosty: ${BRIDGES.size}`;
+    buildGraph();
+  } catch (e) { gdiag("BŁĄD: " + e.message, true); }
+};
+function stripNodeId(x) { return String(x).replace(":", ""); }
+
+$("#refresh").onclick = async () => { await loadStats(); tlLoaded = false; if (currentTab === "graph") buildGraph(); };
 
 /* ---------------- SZUKAJ ---------------- */
 let netMode = "auto";
@@ -691,6 +761,10 @@ document.addEventListener("click", (ev) => {
 async function gotoGraph(dom) {
   try { GRAPH = await api("/api/graph"); } catch { return; }
   switchTab("graph");
+  if (dom.startsWith("p:") || dom.startsWith("d:") || dom.startsWith("o:") || dom.startsWith("i:")) {
+    setTimeout(() => ENGINE?.follow(dom.replace(":", "")), 450);
+    return;
+  }
   const hit = (GRAPH.domeny || []).find(x => x.nazwa === dom);
   if (hit) setTimeout(() => ENGINE?.follow("p" + hit.podmiot_id), 450);
 }
@@ -702,7 +776,29 @@ function switchTab(tab) {
   document.querySelectorAll("nav button").forEach(b => b.classList.toggle("on", b.dataset.tab === tab));
   document.querySelectorAll(".view").forEach(v => v.classList.toggle("on", v.id === "view-" + tab));
   if (tab === "graph") buildGraph();
+  if (tab === "timeline") loadTimeline();
 }
+
+/* ---------------- timeline ---------------- */
+let tlLoaded = false;
+async function loadTimeline(force) {
+  if (tlLoaded && !force) return;
+  const out = $("#tl-out");
+  out.innerHTML = '<div class="hint" style="padding:14px">ładowanie…</div>';
+  try {
+    const d = await api("/api/timeline?limit=300");
+    const evs = d.events || [];
+    if (!evs.length) { out.innerHTML = '<div class="hint" style="padding:14px">brak zdarzeń — uruchom pipeline albo wyślij pierwszą kampanię</div>'; tlLoaded = true; return; }
+    out.innerHTML = evs.map(e => {
+      const t = new Date(e.ts * 1000).toISOString().replace("T", " ").slice(0, 16);
+      const src = e.zrodlo === "audyt" ? "AUDYT" : "AKCJA";
+      const col = e.zrodlo === "audyt" ? "var(--tx3)" : "var(--ac)";
+      return `<div class="trow"><span class="tt">${t}</span><span class="ts" style="color:${col}">${src}</span><span class="ty">${esc(e.typ)}</span><span class="to">${esc(e.opis || "")}</span>${e.podmiot_id ? `<span class="tp" data-goto="p:${e.podmiot_id}">podmiot #${e.podmiot_id} →</span>` : ""}</div>`;
+    }).join("");
+    tlLoaded = true;
+  } catch (err) { out.innerHTML = `<div class="hint" style="padding:14px">błąd: ${esc(String(err.message || err))}</div>`; }
+}
+$("#refresh").addEventListener("click", () => { tlLoaded = false; });
 document.querySelectorAll("nav button").forEach(b => b.onclick = () => switchTab(b.dataset.tab));
 
 $("#s-run").onclick = () => { const q = $("#s-in").value.trim(); if (q) runSzukaj(q); };

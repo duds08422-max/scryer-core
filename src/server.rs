@@ -5,6 +5,7 @@
 //! Bind domyślnie na 127.0.0.1 — wystawienie na świat to świadoma decyzja
 //! operatora (SCRYER_HOST=0.0.0.0).
 
+use crate::graphx;
 use crate::ontology::Ontology;
 use crate::query;
 use axum::{
@@ -127,6 +128,10 @@ pub async fn serve(db: PathBuf, host: &str, port: u16) -> Result<(), String> {
         .route("/api/query", post(api_query))
         .route("/api/tenders", get(api_tenders))
         .route("/api/graph", get(api_graph))
+        .route("/api/graph/stats", get(api_graph_stats))
+        .route("/api/graph/bridges", get(api_graph_bridges))
+        .route("/api/graph/path", get(api_graph_path))
+        .route("/api/timeline", get(api_timeline))
         .route("/api/discover", post(api_discover))
         .route("/api/ai", post(api_ai))
         .route("/api/attack-surface", get(api_attack_surface))
@@ -530,9 +535,99 @@ async fn api_graph(State(s): State<S>) -> ApiResult {
         rows
     };
 
-    Ok(Json(
-        json!({ "podmioty": pods, "domeny": doms, "osoby": osoby, "emailed": emailed }),
-    ))
+    // hub-y wspólnej infrastruktury (pasywny DNS): MX/NS/IP współdzielone przez ≥2 podmioty
+    let hubs: Vec<Value> = graphx::infra_hubs(c)
+        .map_err(err500)?
+        .into_iter()
+        .map(|(typ, wart, dom_ids)| json!({ "typ": typ, "wartosc": wart, "domena_ids": dom_ids }))
+        .collect();
+
+    Ok(Json(json!({
+        "podmioty": pods, "domeny": doms, "osoby": osoby, "emailed": emailed,
+        "hubs": hubs,
+    })))
+}
+
+// ------------------------------------------------------------------- ai ---
+
+/// Statystyki grafu powiązań (skala, spójność, kruchość).
+async fn api_graph_stats(State(s): State<S>) -> ApiResult {
+    let onto = lock_onto(&s);
+    let g = graphx::link_graph(onto.conn()).map_err(err500)?;
+    Ok(Json(g.stats()))
+}
+
+/// Mosty grafu = krawędzie-krytyczne (single points of failure w relacjach).
+async fn api_graph_bridges(State(s): State<S>) -> ApiResult {
+    let onto = lock_onto(&s);
+    let g = graphx::link_graph(onto.conn()).map_err(err500)?;
+    let bridges: Vec<Value> = g
+        .bridges()
+        .into_iter()
+        .map(|(a, b)| json!({ "a": a, "b": b }))
+        .collect();
+    Ok(Json(json!({ "bridges": bridges, "count": bridges.len() })))
+}
+
+#[derive(Deserialize)]
+struct PathQ {
+    from: String,
+    to: String,
+}
+
+/// Najkrótsza ścieżka powiązań między dwoma węzłami ("p:1", "d:2", "o:3").
+async fn api_graph_path(State(s): State<S>, Query(q): Query<PathQ>) -> ApiResult {
+    let onto = lock_onto(&s);
+    let g = graphx::link_graph(onto.conn()).map_err(err500)?;
+    match g.shortest_path(&q.from, &q.to) {
+        Some(path) => Ok(Json(
+            json!({ "found": true, "path": path, "hops": path.len().saturating_sub(1) }),
+        )),
+        None => Ok(Json(json!({ "found": false, "path": [], "hops": 0 }))),
+    }
+}
+
+#[derive(Deserialize)]
+struct TimelineQ {
+    #[serde(default = "default_limit")]
+    limit: i64,
+}
+
+/// Timeline (kinetyka): interakcje + wpisy audytu jednym, chronologicznym
+/// strumieniem — „co się działo i kiedy", gotowe do audytu i do UI.
+async fn api_timeline(State(s): State<S>, Query(q): Query<TimelineQ>) -> ApiResult {
+    let onto = lock_onto(&s);
+    let c = onto.conn();
+    let limit = q.limit.clamp(1, 1000);
+    let mut st = c
+        .prepare(
+            "SELECT ts, 'interakcja' AS zrodlo, typ, COALESCE(email,''),
+                    COALESCE(temat,''), COALESCE(wynik,'-'), COALESCE(podmiot_id, 0)
+             FROM interakcja
+             UNION ALL
+             SELECT ts, 'audyt' AS zrodlo, akcja, COALESCE(aktor,''),
+                    COALESCE(szczegoly,''), '-', 0
+             FROM audyt
+             ORDER BY ts DESC
+             LIMIT ?1",
+        )
+        .map_err(err500)?;
+    let rows: Vec<Value> = st
+        .query_map([limit], |r| {
+            Ok(json!({
+                "ts": r.get::<_, i64>(0)?,
+                "zrodlo": r.get::<_, String>(1)?,
+                "typ": r.get::<_, String>(2)?,
+                "aktor": r.get::<_, String>(3)?,
+                "opis": r.get::<_, String>(4)?,
+                "wynik": r.get::<_, String>(5)?,
+                "podmiot_id": r.get::<_, i64>(6)?,
+            }))
+        })
+        .map_err(err500)?
+        .filter_map(|r| r.ok())
+        .collect();
+    Ok(Json(json!({ "events": rows, "count": rows.len() })))
 }
 
 // ------------------------------------------------------------------- ai ---
@@ -818,8 +913,30 @@ fn persist_discovery(onto: &crate::ontology::Ontology, rep: &Value) {
         Some(p) => onto.upsert_domena(dom, has_mail, p).unwrap_or(0),
         None => onto.upsert_domena_free(dom, has_mail).unwrap_or(0),
     };
-    let _ = dom_id;
     onto.set_domena_mail(dom, spf, dmarc);
+
+    // Wskaźniki infrastruktury (pasywny DNS) → podstawa grafu wspólnej infra:
+    // dwa podmioty na tym samym MX/NS/IP = ukryta relacja w analizie powiązań.
+    if dom_id > 0 {
+        for ip in dns["a"].as_array().map(|a| a.as_slice()).unwrap_or(&[]) {
+            if let Some(s) = ip.as_str() {
+                onto.upsert_wskaznik("ip", s, dom_id);
+            }
+        }
+        for mx in dns["mx"].as_array().map(|a| a.as_slice()).unwrap_or(&[]) {
+            if let Some(s) = mx.as_str() {
+                // normalizacja: sam host bez priorytetu "10 mail.x.pl"
+                let host = s.split_whitespace().last().unwrap_or(s);
+                let host = host.trim_end_matches('.');
+                onto.upsert_wskaznik("mx", host, dom_id);
+            }
+        }
+        for ns in dns["ns"].as_array().map(|a| a.as_slice()).unwrap_or(&[]) {
+            if let Some(s) = ns.as_str() {
+                onto.upsert_wskaznik("ns", s.trim_end_matches('.'), dom_id);
+            }
+        }
+    }
 
     let www = &rep["www"];
     if www["ok"].as_bool().unwrap_or(false) {
