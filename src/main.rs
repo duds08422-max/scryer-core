@@ -22,6 +22,7 @@ fn main() {
         Some("viz") => cmd_viz(),
         Some("serve") => cmd_serve(),
         Some("discover") if args.len() >= 3 => cmd_discover(&args[2]),
+        Some("score-db") => cmd_score_db(),
         Some("report") => println!("{}", send::report("outbox.jsonl")),
         Some("demo") => cmd_demo(),
         _ => {
@@ -37,6 +38,7 @@ fn main() {
             eprintln!("  scryer-core viz                              (graf ontologii -> HTML; SCRYER_VIZ=out.html)");
             eprintln!("  scryer-core serve                            (zywa konsola + API; SCRYER_DB, SCRYER_HOST=127.0.0.1, SCRYER_PORT=8787)");
             eprintln!("  scryer-core discover <domena|email|fraza>    (OSINT: DNS+RDAP+crt.sh+WWW+search → ontologia; SCRYER_DNS, SCRYER_SEARCH_KEY)");
+            eprintln!("  scryer-core score-db                         (backfill tier_score do ontologii; SCRYER_DB)");
             eprintln!("  scryer-core demo");
             std::process::exit(2);
         }
@@ -430,4 +432,13 @@ fn slugify(s: &str) -> String {
         .filter(|p| !p.is_empty())
         .collect::<Vec<_>>()
         .join("-")
+}
+
+/// Backfill tier_score do zywej ontologii: liczy score wg regul kampanii
+/// (sektor + kontakt/DMARC + instytucja + zachodniopomorskie - freemail)
+/// i zapisuje do podmiot.tier_score. Idempotentny. Log do audytu.
+fn cmd_score_db() {
+    let o = ontology::Ontology::open(&db_path()).expect("otwarcie ontologii");
+    let (updated, hot, warm, cold) = o.backfill_tier_scores();
+    println!("tier_score backfill: zaktualizowano {updated} podmiotow (HOT={hot} WARM={warm} COLD={cold})");
 }

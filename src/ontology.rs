@@ -602,6 +602,117 @@ pub fn fold_str(s: &str) -> String {
         .collect()
 }
 
+impl Ontology {
+    /// Backfill tier_score dla wszystkich podmiotow wg regul kampanii:
+    /// waga sektora (Health 10/Water 9/Energy 9/Medtech 7/Admin 6/Other 3)
+    /// +3 kontakt z wlasnej domeny (email istnieje, nie freemail)
+    /// +3 instytucjonalny (kliniczny/uniwersytecki/wojskowy/MSWiA/onkolog/instytut)
+    /// +2 wojewodztwo zachodniopomorskie, -4 freemail.
+    /// Idempotentny; zwraca (updated, hot, warm, cold).
+    pub fn backfill_tier_scores(&self) -> (usize, usize, usize, usize) {
+        type PodmiotRow = (i64, Option<String>, Option<String>, Option<String>);
+        let rows: Vec<PodmiotRow> = self
+            .conn
+            .prepare(
+                "SELECT p.id, p.nazwa, p.sektor, p.wojewodztwo
+                 FROM podmiot p",
+            )
+            .expect("select podmiot")
+            .query_map([], |r| {
+                Ok((
+                    r.get::<_, i64>(0)?,
+                    r.get::<_, Option<String>>(1)?,
+                    r.get::<_, Option<String>>(2)?,
+                    r.get::<_, Option<String>>(3)?,
+                ))
+            })
+            .expect("query podmiot")
+            .filter_map(|r| r.ok())
+            .collect();
+
+        // kontakt z wlasnej domeny istnieje? (osoba.email na domenie podmiotu, nie freemail)
+        let has_own_contact = |pid: i64| -> bool {
+            self.conn
+                .query_row(
+                    "SELECT COUNT(*) FROM osoba o
+                     JOIN podmiot p ON p.id = o.podmiot_id
+                     WHERE o.podmiot_id = ?1 AND o.email IS NOT NULL AND o.email != ''",
+                    [pid],
+                    |r| r.get::<_, i64>(0),
+                )
+                .unwrap_or(0)
+                > 0
+        };
+        let is_freemail = |email: &str| -> bool {
+            let dom = email.split('@').nth(1).unwrap_or("").to_lowercase();
+            const FREE: [&str; 14] = [
+                "wp.pl", "op.pl", "onet.pl", "interia.pl", "gmail.com", "o2.pl", "vp.pl",
+                "poczta.onet.pl", "poczta.fm", "tlen.pl", "go2.pl", "hotmail.com",
+                "yahoo.com", "neostrada.pl",
+            ];
+            FREE.contains(&dom.as_str())
+        };
+        let contact_is_freemail = |pid: i64| -> bool {
+            self.conn
+                .query_row(
+                    "SELECT o.email FROM osoba o WHERE o.podmiot_id = ?1 AND o.email IS NOT NULL AND o.email != '' LIMIT 1",
+                    [pid],
+                    |r| r.get::<_, String>(0),
+                )
+                .map(|e| is_freemail(&e))
+                .unwrap_or(false)
+        };
+
+        let mut updated = 0usize;
+        let mut hot = 0usize;
+        let mut warm = 0usize;
+        let mut cold = 0usize;
+        for (pid, nazwa, sektor, woj) in &rows {
+            let mut s: i64 = match sektor.as_deref().unwrap_or("").trim().to_lowercase().as_str() {
+                "zdrowie" | "health" | "szpital" | "szpitale" => 10,
+                "woda" | "water" | "zwik" | "wodociagi" | "wodociągi" => 9,
+                "energia" | "energy" | "ot" | "energetyka" => 9,
+                "medtech" | "medsoft" | "med" => 7,
+                "admin" | "public" | "urzad" | "urząd" | "gmina" => 6,
+                _ => 3,
+            };
+            let nazwa_l = nazwa.as_deref().unwrap_or("").to_lowercase();
+            if ["klinicz", "uniwersyteck", "wojewódzk", "wojewodzk", "wojskow", "mswia", "onkolog", "instytut"]
+                .iter()
+                .any(|k| nazwa_l.contains(k))
+            {
+                s += 3;
+            }
+            if woj.as_deref().unwrap_or("").trim().eq_ignore_ascii_case("zachodniopomorskie") {
+                s += 2;
+            }
+            if has_own_contact(*pid) {
+                s += 3;
+                if contact_is_freemail(*pid) {
+                    s -= 4;
+                }
+            }
+            let tier = if s >= 15 { "HOT" } else if s >= 10 { "WARM" } else { "COLD" };
+            match tier {
+                "HOT" => hot += 1,
+                "WARM" => warm += 1,
+                _ => cold += 1,
+            }
+            let _ = self.conn.execute(
+                "UPDATE podmiot SET tier_score = ?2 WHERE id = ?1",
+                params![pid, s],
+            );
+            updated += 1;
+        }
+        self.log_audyt(
+            "cli",
+            "score-db",
+            &format!("backfill tier_score: {updated} podmiotow (HOT={hot} WARM={warm} COLD={cold})"),
+        );
+        (updated, hot, warm, cold)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
