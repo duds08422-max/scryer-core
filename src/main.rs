@@ -23,6 +23,7 @@ fn main() {
         Some("serve") => cmd_serve(),
         Some("discover") if args.len() >= 3 => cmd_discover(&args[2]),
         Some("score-db") => cmd_score_db(),
+        Some("recon-db") => cmd_recon_db(),
         Some("report") => println!("{}", send::report("outbox.jsonl")),
         Some("demo") => cmd_demo(),
         _ => {
@@ -39,6 +40,7 @@ fn main() {
             eprintln!("  scryer-core serve                            (zywa konsola + API; SCRYER_DB, SCRYER_HOST=127.0.0.1, SCRYER_PORT=8787)");
             eprintln!("  scryer-core discover <domena|email|fraza>    (OSINT: DNS+RDAP+crt.sh+WWW+search → ontologia; SCRYER_DNS, SCRYER_SEARCH_KEY)");
             eprintln!("  scryer-core score-db                         (backfill tier_score do ontologii; SCRYER_DB)");
+            eprintln!("  scryer-core recon-db                         (bulk DNS recon wszystkich domen; SCRYER_DB, SCRYER_RECON_LIMIT)");
             eprintln!("  scryer-core demo");
             std::process::exit(2);
         }
@@ -441,4 +443,42 @@ fn cmd_score_db() {
     let o = ontology::Ontology::open(&db_path()).expect("otwarcie ontologii");
     let (updated, hot, warm, cold) = o.backfill_tier_scores();
     println!("tier_score backfill: zaktualizowano {updated} podmiotow (HOT={hot} WARM={warm} COLD={cold})");
+}
+
+/// Bulk rekonesans pocztowy wszystkich domen z ontologii (tylko DNS:
+/// MX + SPF + DMARC + provider fingerprint). Kolejka: HOT najpierw.
+/// Bez WWW/search = zero throttle. Postep na stdout co 25 domen.
+fn cmd_recon_db() {
+    use scryer_core::discovery;
+    let o = ontology::Ontology::open(&db_path()).expect("otwarcie ontologii");
+    let limit: usize = std::env::var("SCRYER_RECON_LIMIT")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(500);
+    let domeny = o
+        .domeny_do_recon(limit)
+        .expect("lista domen");
+    let total = domeny.len();
+    println!("recon-db: {total} domen w kolejce (HOT najpierw)");
+    let (mut done, mut mx_ok, mut spf_n, mut dmarc_n, mut fresh) = (0usize, 0usize, 0usize, 0usize, 0usize);
+    for (dom, _pid, mial_dmarc) in &domeny {
+        let r = discovery::mail_recon(dom);
+        o.zapisz_recon_mail(
+            dom,
+            r.mx,
+            &r.mx_provider,
+            r.spf.as_deref(),
+            r.dmarc.as_deref(),
+        );
+        if r.mx { mx_ok += 1; }
+        if r.spf.is_some() { spf_n += 1; }
+        if r.dmarc.is_some() { dmarc_n += 1; }
+        if r.dmarc.is_some() && !*mial_dmarc { fresh += 1; }
+        done += 1;
+        if done % 25 == 0 {
+            println!("  {done}/{total} ... MX={mx_ok} SPF={spf_n} DMARC={dmarc_n} (nowe DMARC: {fresh})");
+        }
+    }
+    println!("recon-db DONE: {done} domen | MX={mx_ok} SPF={spf_n} DMARC={dmarc_n} | nowe DMARC: {fresh}");
+    o.log_audyt("cli", "recon-db", &format!("{done} domen, MX={mx_ok}, SPF={spf_n}, DMARC={dmarc_n}, nowe DMARC={fresh}"));
 }

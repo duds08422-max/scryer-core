@@ -215,6 +215,10 @@ impl Ontology {
         let conn = Connection::open(path)?;
         conn.busy_timeout(std::time::Duration::from_secs(5))?;
         conn.execute_batch(SCHEMA)?;
+        // migracje lekkie (idempotentne): starsze bazy nie maja mx_provider
+        let _ = conn.execute_batch(
+            "ALTER TABLE domena ADD COLUMN mx_provider TEXT DEFAULT '';",
+        );
         Ok(Self { conn })
     }
 
@@ -710,6 +714,44 @@ impl Ontology {
             &format!("backfill tier_score: {updated} podmiotow (HOT={hot} WARM={warm} COLD={cold})"),
         );
         (updated, hot, warm, cold)
+    }
+
+    /// Domeny z ontologii do bulk recon: (domena, podmiot_id, juz ma dmarc).
+    /// Sortowane: najpierw domeny podmiotow HOT (najwyzszy tier_score), potem reszta.
+    pub fn domeny_do_recon(&self, limit: usize) -> SqlResult<Vec<(String, Option<i64>, bool)>> {
+        self.conn
+            .prepare(
+                "SELECT d.nazwa, p.id,
+                        (d.dmarc IS NOT NULL AND d.dmarc != '') AS ma_dmarc
+                 FROM domena d
+                 LEFT JOIN podmiot p ON p.id = d.podmiot_id
+                 ORDER BY COALESCE(p.tier_score, 0) DESC, d.nazwa
+                 LIMIT ?1",
+            )
+            .expect("select domeny")
+            .query_map([limit as i64], |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, Option<i64>>(1)?,
+                    r.get::<_, i64>(2)? != 0,
+                ))
+            })
+            .expect("query domeny")
+            .collect()
+    }
+
+    /// Zapis wyniku bulk recon do domeny (+ fingerprint dostawcy MX).
+    pub fn zapisz_recon_mail(&self, domena: &str, mx: bool, mx_provider: &str,
+                             spf: Option<&str>, dmarc: Option<&str>) {
+        self.set_domena_mail(domena, spf, dmarc);
+        let _ = self.conn.execute(
+            "UPDATE domena SET mx = ?2 WHERE nazwa = ?1",
+            params![domena, mx],
+        );
+        let _ = self.conn.execute(
+            "UPDATE domena SET mx_provider = ?2 WHERE nazwa = ?1",
+            params![domena, mx_provider],
+        );
     }
 }
 
